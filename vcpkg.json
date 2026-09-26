@@ -1,0 +1,29 @@
+{
+    "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
+    "name": "miniutil",
+    "version-string": "0.0.1",
+    "port-version": 0,
+    "description": "MiniUtil.",
+    "homepage": "",
+    "license": "Apache-2.0",
+    "features": {
+        "plugin": {
+            "description": "...",
+          "dependencies": [
+            "directxtk",
+            "directxmath",
+            "fmt",
+            "spdlog",
+            "rapidcsv",
+            "xbyak",
+            "nlohmann-json",
+            "simpleini",
+            "toml11",
+            "catch2"
+          ]
+        }
+    },
+    "default-features": [
+        "plugin"
+    ]
+}
