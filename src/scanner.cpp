@@ -16,144 +16,6 @@ namespace scanner
 		return false;
 	}
 
-#if 0
-	bool IsPathBlockedByStaticsOrTerrain(RE::Actor* a_viewer, RE::Actor* a_target)
-	{
-		if (!a_viewer || !a_target)
-			return false;
-
-		RE::NiPoint3 rayStart, rayEnd;
-
-		if (!GetActorBonePosition(a_viewer, "NPC Head [Head]", rayStart)) {
-			logger::debug("Didn't find 'NPC Head [Head]'");
-			RE::NiPoint3 dummyDirection;
-			a_viewer->GetEyeVector(rayStart, dummyDirection, true);
-		}
-
-		if (!GetActorBonePosition(a_target, "NPC Spine2 [Spn2]", rayEnd)) {
-			logger::debug("Didn't find 'NPC Spine2 [Spn2]'");
-			rayEnd = a_target->GetPosition();
-		}
-
-		auto playerCell = a_viewer->GetParentCell();
-		if (!playerCell)
-			return false;
-
-		auto havokWorld = playerCell->GetbhkWorld();
-		if (!havokWorld)
-			return false;
-
-		// === NEW LOCK METHOD ===
-		// Safely acquire a shared read lock on the worldLock member variable.
-		// The lock automatically unlocks when this variable goes out of scope at the end of the function.
-		RE::BSReadLockGuard lock(havokWorld->worldLock);
-
-		RE::hkpWorld* hkWorld = havokWorld->GetWorld1();
-		if (!hkWorld)
-			return false;
-
-		// 1. Scale down your 3D vectors
-		RE::NiPoint3 scaledFrom = rayStart * RE::bhkWorld::GetWorldScale();
-		RE::NiPoint3 scaledTo = rayEnd * RE::bhkWorld::GetWorldScale();
-
-		// 2. Initialize hkVector4 with clean 4D formatting (X, Y, Z, W)
-		// For positional coordinates, W must always be explicitly set to 1.0f
-		RE::hkpWorldRayCastInput raycastInput;
-		logger::debug("setting 'from' to ({}, {}, {}, {}) = ", scaledFrom.x, scaledFrom.y, scaledFrom.z, 1.0f);
-		logger::debug("setting 'to' to ({}, {}, {}, {}) = ", scaledTo.x, scaledTo.y, scaledTo.z, 1.0f);
-		raycastInput.from = RE::hkVector4(scaledFrom.x, scaledFrom.y, scaledFrom.z, 1.0f);
-		raycastInput.to = RE::hkVector4(scaledTo.x, scaledTo.y, scaledTo.z, 1.0f);
-
-		//raycastInput.filterInfo = 0x00000010; // (Statics)
-		raycastInput.filterInfo = RE::bhkCollisionFilter::GetSingleton()->GetCollisionFilterInfo(RE::COL_LAYER::kStatic);
-
-		/* if (hkWorld->collisionFilter) {
-			auto groupFilter = static_cast<RE::hkpGroupFilter*>(hkWorld->collisionFilter);
-
-			// Generates the perfect bitmask for Layer 1 (L_STATIC) conforming to Skyrim's rules
-			raycastInput.filterInfo = groupFilter->GetNewFilterInfo(1);
-		} else {
-			// Fallback if the filter is missing
-			raycastInput.filterInfo = 0x00000001;
-		}*/
-
-		RE::hkpWorldRayCastOutput raycastOutput;
-		raycastOutput.Reset();
-		hkWorld->CastRay(raycastInput, raycastOutput);
-
-		bool result = raycastOutput.HasHit();
-		logger::debug("raycastOutput.HasHit() = {}", result);
-		return result;
-	}
-
-
-#include <RE/H/hkpAllRayHitCollector.h>
-#include <RE/H/hkpWorldRayCastInput.h>
-#include <RE/H/hkpWorldRayCastOutput.h>
-#include <RE/H/hkpRigidBody.h>
-#endif
-
-	/*
-	bool PerformEnvironmentRaycast(RE::NiPoint3 rayStart, RE::NiPoint3 rayEnd, RE::TESObjectCELL* playerCell)
-	{
-		auto havokWorld = playerCell->GetbhkWorld();
-		if (!havokWorld) return false;
-
-		// Use the framework's lock mechanics
-		RE::BSReadLockGuard lock(havokWorld->worldLock);
-
-		RE::hkpWorld* hkWorld = havokWorld->GetWorld1();
-		if (!hkWorld) return false;
-
-		// 1. Vector transformations using the clean modern scale references
-		float worldScale = RE::bhkWorld::GetWorldScale();
-
-		RE::hkpWorldRayCastInput raycastInput;
-		raycastInput.from = RE::hkVector4(rayStart.x * worldScale, rayStart.y * worldScale, rayStart.z * worldScale, 1.0f);
-		raycastInput.to = RE::hkVector4(rayEnd.x * worldScale, rayEnd.y * worldScale, rayEnd.z * worldScale, 1.0f);
-
-		// Set to 0 to bypass Skyrim's single-layer assignment collision limitations
-		raycastInput.filterInfo = 0;
-
-		// 2. Instantiate the dynamic hit collector exposed in the new headers
-		RE::hkpAllRayHitCollector collector;
-
-		// Execute the Havok ray trace
-		hkWorld->CastRay(raycastInput, collector);
-
-		bool hitStaticObstacle = false;
-		float closestFraction = 1.0f;
-
-		if (collector.HasHit()) {
-			// Safe iteration over the modern hkArray layout
-			for (std::uint32_t i = 0; i < collector.hits.size(); ++i) {
-				const auto& hit = collector.hits[i];
-
-				// Ignore immediate self-clipping at the actor's pivot point origin
-				if (hit.hitFraction < 0.001f) {
-					continue;
-				}
-
-				if (hit.rootCollidable) {
-					// Extract the specific Collision Layer using the 6-bit mask definition
-					std::uint32_t filterInfo = hit.rootCollidable->broadPhaseHandle.collisionFilterInfo;
-					std::uint32_t hitLayer = filterInfo & 0x3F;
-
-					// 1 = L_STATIC, 2 = L_ANIMSTATIC, 32 = L_TERRAIN
-					if (hitLayer == 1 || hitLayer == 2 || hitLayer == 32) {
-						if (hit.hitFraction < closestFraction) {
-							closestFraction = hit.hitFraction;
-							hitStaticObstacle = true;
-						}
-					}
-				}
-			}
-		}
-
-		return hitStaticObstacle;
-	}
-	*/
-
 	bool PerformEnvironmentRaycast(RE::NiPoint3 rayStart, RE::NiPoint3 rayEnd, RE::TESObjectCELL* playerCell)
 	{
 		auto havokWorld = playerCell->GetbhkWorld();
@@ -194,12 +56,14 @@ namespace scanner
 				//    kStatic = 1, kAnimStatic = 2, kTerrain = 32
 				if (hitLayer == RE::COL_LAYER::kStatic ||
 					hitLayer == RE::COL_LAYER::kAnimStatic ||
-					hitLayer == RE::COL_LAYER::kTerrain)
+					hitLayer == RE::COL_LAYER::kTerrain ||
+					hitLayer == RE::COL_LAYER::kGround)
 				{
 					hitStaticObstacle = true;
 					break;
 				}
-			}		
+				logger::trace("Ignoring collision with collision layer {}", hitLayer);
+			}
 		
 			// --- CHAINING MECHANIK ---
 			float hitFraction = raycastOutput.hitFraction;
@@ -363,4 +227,3 @@ namespace scanner
 		return true;
 	}
 }
-

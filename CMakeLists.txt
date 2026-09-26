@@ -64,7 +64,7 @@ set(sources ${sources}
 	
 
 #find_package(CommonLibSSE CONFIG REQUIRED)
-#find_path(CLIB_UTIL_INCLUDE_DIRS "ClibUtil/utils.hpp")
+find_path(SIMPLEINI_INCLUDE_DIRS "SimpleIni.h")
 find_package(nlohmann_json CONFIG REQUIRED)
 #find_package(unofficial-hash-library)
 #find_package(magic_enum CONFIG REQUIRED)
@@ -88,6 +88,11 @@ add_library("${PROJECT_NAME}::${PROJECT_NAME}" ALIAS "${PROJECT_NAME}")
 #        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/extern/SlaveTatsNG/include>
 #		${CLIB_UTIL_INCLUDE_DIRS}
 #		)
+
+target_include_directories(${PROJECT_NAME}
+        PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+		${SIMPLEINI_INCLUDE_DIRS})
 
 target_link_libraries(${PROJECT_NAME}
         PRIVATE

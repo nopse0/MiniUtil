@@ -2,6 +2,7 @@
 
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
+#include <SimpleIni.h>
 
 using namespace std::string_view_literals;
 

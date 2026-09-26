@@ -75,6 +75,7 @@ bool bool_array_to_papyrus(
 	return true;
 }
 
+std::string ExecuteScan_ScriptName("MiniMolestApproach_Script");
 
 bool ExecuteScan(
 	RE::TESQuest* thisInstance,
@@ -95,11 +96,11 @@ bool ExecuteScan(
 		return false;
 
 	RE::BSTSmartPointer<RE::BSScript::Object> scriptObject;
-	if (!vm->FindBoundObject(handle, "MiniMolestApproach_Script", scriptObject) || !scriptObject) {
+	if (!vm->FindBoundObject(handle, ExecuteScan_ScriptName.c_str(), scriptObject) || !scriptObject) {
 		return false;
 	}
 
-	logger::debug("Found MiniMolestApproach_Script");
+	logger::debug("Found {}", ExecuteScan_ScriptName.c_str());
 
 	std::vector<RE::Actor*> male_actors;
 	std::vector<bool>       male_see_player;
@@ -186,6 +187,19 @@ void OnSKSEMessage(SKSE::MessagingInterface::Message* a_msg)
 // Der SKSE Einstiegspunkt
 extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface* a_skse) {
 	SKSE::Init(a_skse);
+
+	const char* const ini_name = "data/skse/plugins/MiniUtil.ini";
+	CSimpleIniA ini;
+	SI_Error err = ini.LoadFile(ini_name);
+	spdlog::level::level_enum level = spdlog::level::info;
+	if (!err) {
+		level = static_cast<spdlog::level::level_enum>(ini.GetLongValue("Config", "LogLevel", level));
+		ExecuteScan_ScriptName = std::string(ini.GetValue("Config", "ScriptName", ExecuteScan_ScriptName.c_str()));
+	}
+	else {
+		logger::info("Could not read config file {}", ini_name);
+	}
+	spdlog::set_level(level);
 
 	auto* messaging = SKSE::GetMessagingInterface();
 	if (messaging) {
