@@ -202,7 +202,7 @@ namespace controller {
         // 1) Package override + force package evaluation
         actor_util::add_package_override(a_actor, form_cache::MiniMolestDoNothingPackage, 100, 1);
         a_actor->EvaluatePackage(true, false);
-        
+
         // 2) Restrain the NPC (life state) and block movement
         a_actor->SetLifeState(RE::ACTOR_LIFE_STATE::kRestrained);
         a_actor->GetActorRuntimeData().boolFlags.set(RE::Actor::BOOL_FLAGS::kMovementBlocked);
@@ -216,61 +216,75 @@ namespace controller {
             cam->ForceThirdPerson();
         }
 
-        // 4) Offset calculation (from Papyrus)
-        float angle = 0.0f;
+        // Papyrus-like simple flow
+        const float pi = 3.14159265358979323846f;
+        // Papyrus uses these exact offsets
         int Xaxis = 0;
         int Yaxis = -50;
-        float AngleZ = player->GetAngleZ();
-        float rad = AngleZ * (3.14159265f / 180.0f); // Konvertierung in Radians!
+        // Read angle once and use it as-is (do NOT convert)
+        float AngleZ_raw = player->GetAngleZ();
 
-        float rMoveX = (std::sin(rad) * static_cast<float>(Yaxis)) + (std::cos(rad) * static_cast<float>(Xaxis));
-        float rMoveY = (std::cos(rad) * static_cast<float>(Yaxis)) - (std::sin(rad) * static_cast<float>(Xaxis));
+        // Compute Papyrus-style offsets using AngleZ exactly as Papyrus does
+        float rMoveX = (std::sin(AngleZ_raw) * static_cast<float>(Yaxis)) + (std::cos(AngleZ_raw) * static_cast<float>(Xaxis));
+        float rMoveY = (std::cos(AngleZ_raw) * static_cast<float>(Yaxis)) - (std::sin(AngleZ_raw) * static_cast<float>(Xaxis));
 
-        RE::NiPoint3 targetPos = player->GetPosition();
-        targetPos.x += rMoveX;
-        targetPos.y += rMoveY;
+        RE::NiPoint3 markerRot = form_cache::MiniMolestAnimMarker ? form_cache::MiniMolestAnimMarker->data.angle : RE::NiPoint3{};
+        markerRot.z = 0.0f;
 
-        RE::NiPoint3 markerRotation = form_cache::MiniMolestAnimMarker ? form_cache::MiniMolestAnimMarker->data.angle : RE::NiPoint3{};
-        markerRotation.z = AngleZ + angle;
+        RE::NiPoint3 markerTarget = player->GetPosition();
+        markerTarget.x += rMoveX;
+        markerTarget.y += rMoveY;
 
-        // Store handles as native RefHandle (LookupByHandle erwartet RefHandle)
+        // store handles for lambdas
+        RE::ObjectRefHandle playerObjHandle = player->GetHandle();
+        RE::RefHandle playerRefHandle = playerObjHandle.native_handle();
         RE::ActorHandle actorHandle = a_actor->GetHandle();
         RE::RefHandle actorRefHandle = actorHandle.native_handle();
 
-        RE::ObjectRefHandle playerObjHandle = player->GetHandle();
-        RE::RefHandle playerRefHandle = playerObjHandle.native_handle();
+        logger::info("start_back_hug: playerAngleRaw={} rMoveX={:.2f} rMoveY={:.2f}", AngleZ_raw, rMoveX, rMoveY);
 
-        // schedule first wait (0.5s) -> move marker to player+offset
-        schedule_task_after_play_seconds(0.5f, [targetPos, markerRotation, playerRefHandle]() {
+        // Move marker after 0.5s (papyrus: Utility.Wait 0.5; MiniMolestAnimMarker.MoveTo)
+        schedule_task_after_play_seconds(0.5f, [markerTarget, markerRot, playerRefHandle]() {
             auto playerLocal = RE::TESObjectREFR::LookupByHandle(playerRefHandle);
-            if (!playerLocal) return;
+            if (!playerLocal) {
+                logger::warn("scheduled: player lookup failed");
+                return;
+            }
             if (!form_cache::MiniMolestAnimMarker) {
                 logger::warn("scheduled: MiniMolestAnimMarker missing");
                 return;
             }
+
             MoveTo_Helper(
                 form_cache::MiniMolestAnimMarker,
                 playerLocal->GetHandle(),
                 playerLocal->GetParentCell(),
                 playerLocal->GetWorldspace(),
-                targetPos,
-                markerRotation);
+                markerTarget,
+                markerRot);
+
+            auto markerPos = form_cache::MiniMolestAnimMarker->GetPosition();
+            logger::info("[scheduled] marker moved. markerPos={:.2f},{:.2f},{:.2f}", markerPos.x, markerPos.y, markerPos.z);
         });
 
-        // schedule second wait (1.0s) -> move actor to marker, set heading, play anims
-        schedule_task_after_play_seconds(1.0f, [actorRefHandle, AngleZ, angle]() {
+        // Wait another 0.5s then Move actor to marker and set angle (papyrus: akactor.MoveTo(MiniMolestAnimMarker); akactor.setangle(...))
+        schedule_task_after_play_seconds(1.0f, [actorRefHandle, AngleZ_raw]() {
             auto actorPtr = RE::Actor::LookupByHandle(actorRefHandle);
-            if (!actorPtr) return;
+            if (!actorPtr) {
+                logger::warn("scheduled: actor lookup failed");
+                return;
+            }
+
             if (form_cache::MiniMolestAnimMarker) {
                 actorPtr->MoveTo(form_cache::MiniMolestAnimMarker);
             } else {
                 logger::warn("scheduled: MiniMolestAnimMarker not cached for actor move");
             }
 
-            float newHeading = AngleZ + angle;
-            actorPtr->SetHeading(newHeading);
+            // Papyrus sets angle = AngleZ + angle (angle == 0 in original). We reuse AngleZ_raw as-is.
+            actorPtr->SetAngle(RE::NiPoint3{ 0.0f, 0.0f, AngleZ_raw });
 
-            // trigger both animation graphs
+            // fire animations
             actorPtr->NotifyAnimationGraph("BaboBackHugStartM");
             if (auto playerLocal = RE::PlayerCharacter::GetSingleton()) {
                 playerLocal->NotifyAnimationGraph("BaboBackHugStartF");
@@ -280,54 +294,7 @@ namespace controller {
         logger::info("start_back_hug: scheduled back hug sequence for actor {}", (void*)a_actor);
     }
 
-    /*
-    void controller::end_back_hug(RE::Actor* a_actor) {
-        if (!a_actor) {
-            logger::warn("end_back_hug: null actor");
-            return;
-        }
-
-        auto player = RE::PlayerCharacter::GetSingleton();
-        if (!player) {
-            logger::warn("end_back_hug: player singleton missing");
-            return;
-        }
-
-        // Entferne das DoNothing-Package-Override, falls gesetzt
-        actor_util::remove_package_override(a_actor, form_cache::MiniMolestDoNothingPackage);
-
-        // Setze LifeState und Movement-Flag zurück
-        a_actor->SetLifeState(RE::ACTOR_LIFE_STATE::kAlive);
-        a_actor->GetActorRuntimeData().boolFlags.reset(RE::Actor::BOOL_FLAGS::kMovementBlocked);
-        a_actor->StopMoving(0.0f);
-
-        // Re-aktiviere Player Controls
-        player->SetPlayerControls(true);
-
-        // Firmen wieder AI laufen lassen
-        a_actor->EvaluatePackage(true, false);
-
-        logger::info("end_back_hug: restored actor {} and re-enabled player controls", (void*)a_actor);
-    }
-    */
-
     void controller::on_dialog_end(RE::Actor* a_speaker) {
-    /*
-    	UnregisterForUpdate()  ; remove ForceGreetTimeout
-	Int outcome = MiniMolestForceGreetOutcome.GetValueInt()
-	Debug.Trace("[MiniMolest Main] OnDialogueEnd: outcome = " + outcome)
-	MiniMolestForceGreetType.SetValue(0)
-	MiniMolestForceGreetOutcome.SetValue(0)
-
-	if outcome == 1
-		Debug.Trace("[MiniMolest Main] Dialogue ended with " + speaker.GetDisplayName() + ". Starting struggle minigame...")
-		MiniMolestState = "Struggle"
-		StartBackHug(speaker)
-		MiniMolestStruggle.StartBreakFree(false)
-	
-		RegisterForSingleUpdate(StruggleTimeout)
-        */
-    
         if (_state != state_t::ForceGreet || _force_greet_actor != a_speaker) {
             logger::warn("on_dialog_end called but state is not ForceGreet or actor does not match, ignoring");
             return;
@@ -343,7 +310,6 @@ namespace controller {
             start_back_hug(a_speaker);
             minigame::struggle_game::get_instance().start(_struggle_timeout_seconds);
         }
-
     }
 
 }
