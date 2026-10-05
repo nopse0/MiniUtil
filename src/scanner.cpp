@@ -115,7 +115,7 @@ namespace scanner
 
 
 
-	bool scan_actors(float a_radius, size_t a_nearest_males, size_t a_nearest_females,
+	bool scan_actors_old(float a_radius, size_t a_nearest_males, size_t a_nearest_females,
 		std::vector<RE::Actor*>& a_male_actors, std::vector<bool>& a_male_see_player,
 		std::vector<RE::Actor*>& a_female_actors, std::vector<bool>& a_female_see_player)
 	{
@@ -226,4 +226,131 @@ namespace scanner
 
 		return true;
 	}
+
+	/**
+	* Returns male and female actors near the player, and their squared distance to the player 
+	*/
+	bool scan_actors(
+		float a_radius,
+		std::vector< std::pair<float, RE::Actor*> >& a_males, 
+		std::vector< std::pair<float, RE::Actor*> >& a_females)
+	{
+		static const auto ActorTypeNPC = RE::TESForm::LookupByEditorID<RE::BGSKeyword>("ActorTypeNPC");
+
+		RE::Actor* player = RE::PlayerCharacter::GetSingleton();
+		if (!player) {
+			logger::info("Player character not found.");
+			return false;
+		}
+
+		const auto processLists = RE::ProcessLists::GetSingleton();
+		if (!processLists) {
+			return false;
+		}
+
+		auto squared_max_dist = a_radius * a_radius;
+
+		for (auto& target_handle : processLists->highActorHandles) {
+			const auto actor_ptr = target_handle.get();
+			if (!actor_ptr) {
+				continue;
+			}
+			const auto actor = actor_ptr.get();
+			logger::debug("Processing actor = {}", (void*)actor);
+			if (!actor || actor->IsDead() || !actor->Is3DLoaded() || actor == player) {
+				continue;
+			}
+
+			// npc's only
+			const auto base = actor_ptr->GetActorBase();
+			if (!base) {
+				continue;
+			}
+
+			if (base->GetFormType() != RE::FormType::NPC) {
+				continue;
+			}
+
+			const auto race = base->GetRace();
+			if (!race) {
+				continue;
+			}
+			if (!race->HasKeyword(ActorTypeNPC)) {
+				continue;
+			}
+
+			auto sex = actor->GetActorBase()->GetSex();
+			if (sex < 0 || sex > 1) {
+				continue;
+			}
+
+			// distance to player
+			auto player_pos = player->GetPosition();
+			auto squared_dist = player_pos.GetSquaredDistance(actor->GetPosition());
+			logger::debug("squared_dist: {}, squared_max_dist: {}", squared_dist, squared_max_dist);
+			if (squared_dist > squared_max_dist) {
+				continue;
+			}
+
+			// can see player
+			/*bool can_see_player = true;
+			const float squared_auto_visible_dist = 400.f * 400.f;
+			logger::debug("squared_dist = {}, squared_auto_visible_dist = {}", squared_dist, squared_auto_visible_dist);
+			if (squared_dist >= squared_auto_visible_dist) {
+				logger::debug("squared_dist {} >= squared_auto_visible_dist {}, checking line of sight", squared_dist, squared_auto_visible_dist);
+				//can_see_player = can_see_target(actor, player, false);
+				//can_see_player = !IsPhysicalPathBlocked(actor, player);
+				can_see_player = !IsPathBlockedByStaticsOrTerrain(actor, player);
+			}*/
+
+			if (sex == 0) {
+				a_males.push_back(std::pair(squared_dist, actor));
+				logger::debug("added actor {} to males array, males array size = {}", (void*)actor, a_males.size());
+			}
+			else {
+				a_females.push_back(std::pair(squared_dist, actor));
+			}
+		}
+
+		/*int nth_males = std::min(a_nearest_males, males.size());
+		logger::debug("nth_males = {}", nth_males);
+		if (nth_males > 0) {
+			std::nth_element(males.begin(), males.begin() + nth_males - 1, males.end(),
+				[](const auto& a, const auto& b) { return a.first < b.first; });
+		}
+		logger::debug("males size after nth_element = {}", males.size());
+
+		int nth_females = std::min(a_nearest_females, females.size());
+		if (nth_females > 0) {
+			std::nth_element(females.begin(), females.begin() + nth_females - 1, females.end(),
+				[](const auto& a, const auto& b) { return a.first < b.first; });
+		}
+
+		// copy to result arrays
+		for (auto& elem : males) {
+			a_male_actors.push_back(elem.second.first);
+			a_male_see_player.push_back(elem.second.second);
+		}
+
+		for (auto& elem : females) {
+			a_female_actors.push_back(elem.second.first);
+			a_female_see_player.push_back(elem.second.second);
+		}*/
+
+		return true;
+	}
+
+	// Puts the n nearest actors to the front of the vector
+	size_t nth_nearest(size_t a_n_nearest, std::vector< std::pair<float, RE::Actor*> >& a_actors)
+	{
+		auto nth_actors = std::min(a_n_nearest, a_actors.size());
+		logger::debug("nth_actors = {}", nth_actors);
+		if (nth_actors > 0) {
+			std::nth_element(a_actors.begin(), a_actors.begin() + nth_actors - 1, a_actors.end(),
+				[](const auto& a, const auto& b) { return a.first < b.first; });
+		}
+		return nth_actors;
+	}
+
 }
+

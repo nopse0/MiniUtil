@@ -3,6 +3,7 @@
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 #include <SimpleIni.h>
+#include <SKSEMenuFramework.h>
 
 using namespace std::string_view_literals;
 
@@ -49,9 +50,25 @@ namespace logger
 
 }
 
-// namespace logger = SKSE::log;
-
 namespace util {
 	using SKSE::stl::report_and_fail;
 }
 
+template <typename T>
+class singleton {
+public:
+	static T& get_instance() {
+		static T instance;
+		return instance;
+	}
+
+	// Kopieren und Zuweisen strikt verbieten
+	singleton(const singleton&) = delete;
+	singleton& operator=(const singleton&) = delete;
+	singleton(singleton&&) = delete;
+	singleton& operator=(singleton&&) = delete;
+
+protected:
+	singleton() = default;
+	virtual ~singleton() = default;
+};

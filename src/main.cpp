@@ -1,6 +1,13 @@
-#include "REL/Relocation.h"
-#include "SKSE/SKSE.h"
+#include "minigame.h"
+#include "form_cache.h"
+#include "actor_util.h"
+#include "controller.h"
 
+namespace main_loop {
+	void install();
+}
+
+#if 0
 namespace scanner {
 	bool scan_actors(float a_radius, size_t a_nearest_males, size_t a_nearest_females,
 		std::vector<RE::Actor*>& a_male_actors, std::vector<bool>& a_male_see_player,
@@ -11,7 +18,6 @@ bool actor_array_to_papyrus(RE::BSScript::Internal::VirtualMachine* vm, RE::BSSc
 	RE::BSTSmartPointer<RE::BSScript::Array>& papyrusArray)
 {
 	RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo> actorTypeInfoPtr;
-	// Falls GetScriptObjectType eine Fehlermeldung wirft, probiere alternativ: vm->GetTypeInfo("Actor", actorTypeInfoPtr)
 	if (!vm->GetScriptObjectType("Actor", actorTypeInfoPtr) || !actorTypeInfoPtr) {
 		logger::error("Konnte ObjectTypeInfo für 'Actor' nicht finden!");
 		return false;
@@ -161,26 +167,82 @@ bool ExecuteScan(
 	return true;
 }
 
+void MinigameTestCpp(RE::TESQuest* thisInstance, int duration_secs)
+{
+	minigame::struggle_game::get_instance().start(duration_secs);
+}
+#endif
+
+void MiniUtil_OnDialogEnd(RE::StaticFunctionTag*, RE::Actor* akSpeaker)
+{
+	controller::controller::get_instance().on_dialog_end(akSpeaker);
+}
+
 bool RegisterPapyrusFunctions(RE::BSScript::IVirtualMachine* vm)
 {
 	if (!vm) return false;
 
 	// "ExecuteScan" wird an das Instanz-Skript "MiniMolestApproach_Script" gebunden
-	vm->RegisterFunction("ExecuteScan", "MiniMolestApproach_Script", ExecuteScan);
+	vm->RegisterFunction("OnDialogEnd", "MiniUtil_Script", MiniUtil_OnDialogEnd);
+	//vm->RegisterFunction("MinigameTestCpp", "MiniMolestStruggle_Script", MinigameTestCpp);
 
-	SKSE::log::info("ExecuteScan erfolgreich an MiniMolestApproach_Script gebunden.");
+	SKSE::log::info("MiniUtil_OnDialogEnd erfolgreich an {} gebunden.", "MiniUtil_Script");
 	return true;
 }
+
+// ImGui
+void __stdcall render() {
+	minigame::struggle_game::get_instance().render();
+}
+
+bool __stdcall on_input(RE::InputEvent* a_event) {
+	return minigame::struggle_game::get_instance().on_input(a_event);
+}
+
+void InitializeMCP() {
+	if (!SKSEMenuFramework::IsInstalled()) {
+		return;
+	}
+
+	SKSEMenuFramework::AddHudElement(render);
+	SKSEMenuFramework::AddInputEvent(on_input);
+}
+
+// Skyrim Forms (to be exceuted after data loaded)
+void InitializeForms() {
+	auto dataHandler = RE::TESDataHandler::GetSingleton();
+	if (!dataHandler) return;
+
+	const char* modName = "MiniMolest.esp";
+
+	form_cache::MiniMolestForceGreetOutcome = dataHandler->LookupForm<RE::TESGlobal>(0x00031354, modName);
+	form_cache::MiniMolestForceGreetType = dataHandler->LookupForm<RE::TESGlobal>(0x00017E46, modName);
+	form_cache::MiniMolestForceGreetPackage = dataHandler->LookupForm<RE::TESPackage>(0x000036CC, modName);
+	form_cache::MiniMolestDoNothingPackage = dataHandler->LookupForm<RE::TESPackage>(0x0001CF49, modName);
+	form_cache::MiniMolestAnimMarker = dataHandler->LookupForm<RE::TESObjectREFR>(0x0001CF48, modName);
+
+	if (!form_cache::MiniMolestForceGreetOutcome
+		|| !form_cache::MiniMolestForceGreetType
+		|| !form_cache::MiniMolestForceGreetPackage
+		|| !form_cache::MiniMolestDoNothingPackage
+		|| !form_cache::MiniMolestAnimMarker) {
+		logger::error("Failed to load some forms from {}!", modName);
+	}
+	else {
+		logger::info("Successfully loaded forms from {}.", modName);
+	}
+}
+
 
 // 3. Der Message Listener
 void OnSKSEMessage(SKSE::MessagingInterface::Message* a_msg)
 {
+	void ActorUtilAddresses();
+
 	if (a_msg->type == SKSE::MessagingInterface::kDataLoaded) {
-		auto* papyrus = SKSE::GetPapyrusInterface();
-		if (papyrus) {
-			// HIER übergeben wir jetzt direkt die saubere Funktion ohne verschachteltes Lambda
-			papyrus->Register(RegisterPapyrusFunctions);
-		}
+		InitializeForms();
+		main_loop::install();
+		actor_util::internal::initialize();
 	}
 }
 
@@ -188,13 +250,16 @@ void OnSKSEMessage(SKSE::MessagingInterface::Message* a_msg)
 extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface* a_skse) {
 	SKSE::Init(a_skse);
 
+	// 1. ALLOCATE THE TRAMPOLINE BLOCK HERE FIRST!
+	//SKSE::AllocTrampoline(64);
+
 	const char* const ini_name = "data/skse/plugins/MiniUtil.ini";
 	CSimpleIniA ini;
 	SI_Error err = ini.LoadFile(ini_name);
 	spdlog::level::level_enum level = spdlog::level::info;
 	if (!err) {
 		level = static_cast<spdlog::level::level_enum>(ini.GetLongValue("Config", "LogLevel", level));
-		ExecuteScan_ScriptName = std::string(ini.GetValue("Config", "ScriptName", ExecuteScan_ScriptName.c_str()));
+		//ExecuteScan_ScriptName = std::string(ini.GetValue("Config", "ScriptName", ExecuteScan_ScriptName.c_str()));
 	}
 	else {
 		logger::info("Could not read config file {}", ini_name);
@@ -204,6 +269,13 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
 	auto* messaging = SKSE::GetMessagingInterface();
 	if (messaging) {
 		messaging->RegisterListener(OnSKSEMessage);
+	}
+
+	InitializeMCP();
+
+	auto* papyrus = SKSE::GetPapyrusInterface();
+	if (papyrus) {
+		papyrus->Register(RegisterPapyrusFunctions);
 	}
 
 	return true;

@@ -1,0 +1,349 @@
+#include "minigame.h"
+#include "scanner.h"
+#include "actor_util.h"
+#include "form_cache.h"
+#include "controller.h"
+
+#include <algorithm>
+#include <cmath>
+
+namespace controller {
+
+    // Eigene Definition, da die original-Methode private ist
+    static void MoveTo_Helper(
+        RE::TESObjectREFR* a_this,
+        const RE::ObjectRefHandle& a_targetHandle,
+        RE::TESObjectCELL* a_targetCell,
+        RE::TESWorldSpace* a_selfWorldSpace,
+        const RE::NiPoint3& a_position,
+         const RE::NiPoint3& a_rotation)
+    {
+        if (!a_this) return;
+
+        // Wir definieren den Funktions-Typen genau wie in der CommonLib
+        using func_t = void(RE::TESObjectREFR*, const RE::ObjectRefHandle&, RE::TESObjectCELL*, RE::TESWorldSpace*, const RE::NiPoint3&, const RE::NiPoint3&);
+
+        // Nutzung der plattformunabhängigen IDs von CommonLibSSE-NG
+        static REL::Relocation<func_t> func{ RELOCATION_ID(56227, 56626) };
+
+        func(a_this, a_targetHandle, a_targetCell, a_selfWorldSpace, a_position, a_rotation);
+    }
+
+
+    static inline bool is_playing()
+    {
+        auto ui = RE::UI::GetSingleton();
+        if (!ui) {
+            return false;
+        }
+
+        // 1. Block if the game is natively paused (Esc menu, inventory, etc.)
+        if (ui->GameIsPaused()) {
+            return false;
+        }
+
+        // 2. Block if an "Application Menu" is open. 
+        // This internal engine flag covers the Main Menu (title screen) and Loading screens.
+        if (ui->IsApplicationMenuOpen()) {
+            return false;
+        }
+
+        // 3. SkyUI / MCM Specific Protection (Crucial for Skyrim Souls RE compatibility)
+        // The journal menu includes the MCM. Since it might be unpaused by mods, 
+        // we explicitly check its presence on the stack.
+        if (ui->IsMenuOpen("Journal Menu")) {
+            return false;
+        }
+
+        // 4. (Optional) Prevent running if the console or full-screen menus are open
+        if (ui->IsMenuOpen("Console") || ui->IsMenuOpen("Loading Menu")) {
+            return false;
+        }
+
+        return true;
+    }
+
+    static inline float get_game_day()
+    {
+        auto calendar = RE::Calendar::GetSingleton();
+        if (!calendar) return 0.f;
+        return calendar->GetDaysPassed();
+    }
+
+    void controller::update_play_second(float a_play_time_delta_seconds) {
+        _play_second += a_play_time_delta_seconds;
+    }
+
+    void controller::set_event_success_min_delays()
+    {
+        _next_event_min_game_day = get_game_day() + _event_min_success_delay_game_days;
+        _next_event_min_play_second = get_play_second() + _event_min_success_delay_play_seconds;
+    }
+
+    void controller::set_event_failure_min_delays()
+    {
+        _next_event_min_play_second = get_play_second() + _event_min_failure_delay_play_seconds;
+    }
+
+    // Scheduling helpers
+    void controller::schedule_task_after_play_seconds(float a_delay, std::function<void()> a_fn)
+    {
+        schedule_task_at_play_second(get_play_second() + a_delay, std::move(a_fn));
+    }
+
+    void controller::schedule_task_at_play_second(float a_execute_play_second, std::function<void()> a_fn)
+    {
+        ScheduledTask t;
+        t.execute_play_second = a_execute_play_second;
+        t.fn = std::move(a_fn);
+        _scheduledTasks.emplace_back(std::move(t));
+    }
+
+    void controller::on_timer_tick(float a_play_time_delta_seconds)
+    {
+        logger::trace("Controller received timer tick");
+
+        // advance time first (so scheduling uses same time base as Papyrus Wait)
+        update_play_second(a_play_time_delta_seconds);
+
+        // run scheduled tasks that are due
+        for (auto it = _scheduledTasks.begin(); it != _scheduledTasks.end();) {
+            if (it->execute_play_second <= get_play_second()) {
+                auto fn = std::move(it->fn);
+                it = _scheduledTasks.erase(it);
+                try {
+                    if (fn) fn();
+                } catch (const std::exception& e) {
+                    logger::error("Scheduled task threw exception: {}", e.what());
+                } catch (...) {
+                    logger::error("Scheduled task threw unknown exception");
+                }
+            } else {
+                ++it;
+            }
+        }
+
+        if (!is_playing()) {
+            logger::trace("on_timer_tick aborted, not playing");
+            return;
+        }
+
+        // on the fly initialization
+        if (_next_event_min_play_second == 0.f)
+            set_event_success_min_delays();
+
+        if (get_play_second() < _next_event_min_play_second || get_game_day() < _next_event_min_game_day) {
+            logger::trace(
+                "on_timer_tick aborted, events on cooldown, "
+                "get_play_second:{} < _next_event_min_play_second::{} || get_game_day:{} < _next_event_min_game_day:{}",
+                get_play_second(), _next_event_min_play_second, get_game_day(), _next_event_min_game_day);
+            return;
+        }
+
+        if (!_busy) {
+            std::vector< std::pair<float, RE::Actor*> > males;
+            std::vector< std::pair<float, RE::Actor*> > females;
+            auto result = scanner::scan_actors(2000.f, males, females);
+            if (result && males.size()) {
+                int n = scanner::nth_nearest(3, males);
+                if (n > 0) {
+                    _busy = true;
+                    _state = state_t::ForceGreet;
+                    _force_greet_start_play_second = get_play_second();
+                    form_cache::MiniMolestForceGreetType->value = 1.f;
+                    form_cache::MiniMolestForceGreetOutcome->value = 1.f;
+                    RE::Actor* actor = males[0].second;
+                    _force_greet_actor = actor;
+                    //logger::trace("before: actor_util::count_package_override = {}", actor_util::count_package_override(actor));
+                    actor_util::add_package_override(actor, form_cache::MiniMolestForceGreetPackage, 100, 1);
+                    //logger::trace("after: actor_util::count_package_override = {}", actor_util::count_package_override(actor));
+                    logger::info("Started ForceGreet package on actor {}", (void*)actor);
+                    actor->EvaluatePackage(true, false);
+                }
+            }
+        }
+        else {
+            if (_state == state_t::ForceGreet) {
+                if (get_play_second() - _force_greet_start_play_second > _force_greet_timeout_play_seconds) {
+                    logger::debug("ForceGreet timeout reached, removing package override and resetting state");
+                    _busy = false;
+                    _state = state_t::Idle;
+                    actor_util::remove_package_override(_force_greet_actor, form_cache::MiniMolestForceGreetPackage);
+                    _force_greet_actor->EvaluatePackage(true, false);
+                    _force_greet_actor = nullptr;
+                    set_event_failure_min_delays();
+                }
+            }
+            else if (_state == state_t::Struggle) {
+                auto stat = minigame::struggle_game::get_instance().get_state();
+                if (stat != minigame::struggle_game::state::playing) {
+                    logger::debug("Struggle minigame finished, resetting state");
+                    _busy = false;
+                    _state = state_t::Idle;
+                    set_event_success_min_delays();
+                }
+            }
+        }
+
+    }
+
+    void controller::start_back_hug(RE::Actor* a_actor) {
+        if (!a_actor) {
+            logger::warn("start_back_hug: a_actor is null");
+            return;
+        }
+
+        auto player = RE::PlayerCharacter::GetSingleton();
+        if (!player) {
+            logger::warn("start_back_hug: player singleton missing");
+            return;
+        }
+
+        // 1) Package override + force package evaluation
+        actor_util::add_package_override(a_actor, form_cache::MiniMolestDoNothingPackage, 100, 1);
+        a_actor->EvaluatePackage(true, false);
+        
+        // 2) Restrain the NPC (life state) and block movement
+        a_actor->SetLifeState(RE::ACTOR_LIFE_STATE::kRestrained);
+        a_actor->GetActorRuntimeData().boolFlags.set(RE::Actor::BOOL_FLAGS::kMovementBlocked);
+        a_actor->StopMoving(0.0f);
+
+        // 3) Make player AI-driven by disabling player controls
+        player->SetPlayerControls(false);
+
+        // Ensure third person if currently in first person
+        if (auto cam = RE::PlayerCamera::GetSingleton(); cam && cam->IsInFirstPerson()) {
+            cam->ForceThirdPerson();
+        }
+
+        // 4) Offset calculation (from Papyrus)
+        float angle = 0.0f;
+        int Xaxis = 0;
+        int Yaxis = -50;
+        float AngleZ = player->GetAngleZ();
+        float rad = AngleZ * (3.14159265f / 180.0f); // Konvertierung in Radians!
+
+        float rMoveX = (std::sin(rad) * static_cast<float>(Yaxis)) + (std::cos(rad) * static_cast<float>(Xaxis));
+        float rMoveY = (std::cos(rad) * static_cast<float>(Yaxis)) - (std::sin(rad) * static_cast<float>(Xaxis));
+
+        RE::NiPoint3 targetPos = player->GetPosition();
+        targetPos.x += rMoveX;
+        targetPos.y += rMoveY;
+
+        RE::NiPoint3 markerRotation = form_cache::MiniMolestAnimMarker ? form_cache::MiniMolestAnimMarker->data.angle : RE::NiPoint3{};
+        markerRotation.z = AngleZ + angle;
+
+        // Store handles as native RefHandle (LookupByHandle erwartet RefHandle)
+        RE::ActorHandle actorHandle = a_actor->GetHandle();
+        RE::RefHandle actorRefHandle = actorHandle.native_handle();
+
+        RE::ObjectRefHandle playerObjHandle = player->GetHandle();
+        RE::RefHandle playerRefHandle = playerObjHandle.native_handle();
+
+        // schedule first wait (0.5s) -> move marker to player+offset
+        schedule_task_after_play_seconds(0.5f, [targetPos, markerRotation, playerRefHandle]() {
+            auto playerLocal = RE::TESObjectREFR::LookupByHandle(playerRefHandle);
+            if (!playerLocal) return;
+            if (!form_cache::MiniMolestAnimMarker) {
+                logger::warn("scheduled: MiniMolestAnimMarker missing");
+                return;
+            }
+            MoveTo_Helper(
+                form_cache::MiniMolestAnimMarker,
+                playerLocal->GetHandle(),
+                playerLocal->GetParentCell(),
+                playerLocal->GetWorldspace(),
+                targetPos,
+                markerRotation);
+        });
+
+        // schedule second wait (1.0s) -> move actor to marker, set heading, play anims
+        schedule_task_after_play_seconds(1.0f, [actorRefHandle, AngleZ, angle]() {
+            auto actorPtr = RE::Actor::LookupByHandle(actorRefHandle);
+            if (!actorPtr) return;
+            if (form_cache::MiniMolestAnimMarker) {
+                actorPtr->MoveTo(form_cache::MiniMolestAnimMarker);
+            } else {
+                logger::warn("scheduled: MiniMolestAnimMarker not cached for actor move");
+            }
+
+            float newHeading = AngleZ + angle;
+            actorPtr->SetHeading(newHeading);
+
+            // trigger both animation graphs
+            actorPtr->NotifyAnimationGraph("BaboBackHugStartM");
+            if (auto playerLocal = RE::PlayerCharacter::GetSingleton()) {
+                playerLocal->NotifyAnimationGraph("BaboBackHugStartF");
+            }
+        });
+
+        logger::info("start_back_hug: scheduled back hug sequence for actor {}", (void*)a_actor);
+    }
+
+    /*
+    void controller::end_back_hug(RE::Actor* a_actor) {
+        if (!a_actor) {
+            logger::warn("end_back_hug: null actor");
+            return;
+        }
+
+        auto player = RE::PlayerCharacter::GetSingleton();
+        if (!player) {
+            logger::warn("end_back_hug: player singleton missing");
+            return;
+        }
+
+        // Entferne das DoNothing-Package-Override, falls gesetzt
+        actor_util::remove_package_override(a_actor, form_cache::MiniMolestDoNothingPackage);
+
+        // Setze LifeState und Movement-Flag zurück
+        a_actor->SetLifeState(RE::ACTOR_LIFE_STATE::kAlive);
+        a_actor->GetActorRuntimeData().boolFlags.reset(RE::Actor::BOOL_FLAGS::kMovementBlocked);
+        a_actor->StopMoving(0.0f);
+
+        // Re-aktiviere Player Controls
+        player->SetPlayerControls(true);
+
+        // Firmen wieder AI laufen lassen
+        a_actor->EvaluatePackage(true, false);
+
+        logger::info("end_back_hug: restored actor {} and re-enabled player controls", (void*)a_actor);
+    }
+    */
+
+    void controller::on_dialog_end(RE::Actor* a_speaker) {
+    /*
+    	UnregisterForUpdate()  ; remove ForceGreetTimeout
+	Int outcome = MiniMolestForceGreetOutcome.GetValueInt()
+	Debug.Trace("[MiniMolest Main] OnDialogueEnd: outcome = " + outcome)
+	MiniMolestForceGreetType.SetValue(0)
+	MiniMolestForceGreetOutcome.SetValue(0)
+
+	if outcome == 1
+		Debug.Trace("[MiniMolest Main] Dialogue ended with " + speaker.GetDisplayName() + ". Starting struggle minigame...")
+		MiniMolestState = "Struggle"
+		StartBackHug(speaker)
+		MiniMolestStruggle.StartBreakFree(false)
+	
+		RegisterForSingleUpdate(StruggleTimeout)
+        */
+    
+        if (_state != state_t::ForceGreet || _force_greet_actor != a_speaker) {
+            logger::warn("on_dialog_end called but state is not ForceGreet or actor does not match, ignoring");
+            return;
+        }
+
+        auto outcome = form_cache::MiniMolestForceGreetOutcome->value;
+        form_cache::MiniMolestForceGreetType->value = 0.f;
+        form_cache::MiniMolestForceGreetOutcome->value = 0.f;
+
+        if (outcome == 1.f) {
+            logger::info("Dialogue ended with actor {}, starting struggle minigame", (void*)a_speaker);
+            _state = state_t::Struggle;
+            start_back_hug(a_speaker);
+            minigame::struggle_game::get_instance().start(_struggle_timeout_seconds);
+        }
+
+    }
+
+}

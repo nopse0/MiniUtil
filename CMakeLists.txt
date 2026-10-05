@@ -45,13 +45,18 @@ set(sources
 	${CMAKE_CURRENT_BINARY_DIR}/version.rc)
 
 set(headers
-	#include/tattoo_field_db.h
 	src/PCH.h
+    "include/stat_tracker.h"
 )
 
 set(sources ${sources}
     src/main.cpp
     src/scanner.cpp
+    src/struggle_game.cpp
+    src/main_loop.cpp
+    src/actor_util.cpp
+    src/controller.cpp
+    src/snippets.cpp
 )
 
 ########################################################################################################################
@@ -92,7 +97,9 @@ add_library("${PROJECT_NAME}::${PROJECT_NAME}" ALIAS "${PROJECT_NAME}")
 target_include_directories(${PROJECT_NAME}
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-		${SIMPLEINI_INCLUDE_DIRS})
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lib/mcp>
+		${SIMPLEINI_INCLUDE_DIRS}
+)
 
 target_link_libraries(${PROJECT_NAME}
         PRIVATE
