@@ -2,6 +2,7 @@
 #include "form_cache.h"
 #include "actor_util.h"
 #include "controller.h"
+#include "sl_scenes.h"
 
 namespace main_loop {
 	void install();
@@ -178,15 +179,25 @@ void MiniUtil_OnDialogEnd(RE::StaticFunctionTag*, RE::Actor* akSpeaker)
 	controller::controller::get_instance().on_dialog_end(akSpeaker);
 }
 
+bool MiniMolest_GetSceneParameters(RE::TESQuest* thisInstance, float handle)
+{
+	return sl_scenes::sl_scene::get_instance().get_scene_parameters(thisInstance, handle);
+}
+
+bool MiniUtil_SetSceneThreadID(RE::StaticFunctionTag*, float handle, uint32_t threadId)
+{
+	return sl_scenes::sl_scene::get_instance().set_thread_id(handle, threadId);
+}
+
+
 bool RegisterPapyrusFunctions(RE::BSScript::IVirtualMachine* vm)
 {
 	if (!vm) return false;
 
-	// "ExecuteScan" wird an das Instanz-Skript "MiniMolestApproach_Script" gebunden
 	vm->RegisterFunction("OnDialogEnd", "MiniUtil_Script", MiniUtil_OnDialogEnd);
-	//vm->RegisterFunction("MinigameTestCpp", "MiniMolestStruggle_Script", MinigameTestCpp);
+	vm->RegisterFunction("GetSceneParameters", "MiniMolestMain_Script", MiniMolest_GetSceneParameters);
+	vm->RegisterFunction("SetSceneThreadID", "MiniUtil_Script", MiniUtil_SetSceneThreadID);
 
-	SKSE::log::info("MiniUtil_OnDialogEnd erfolgreich an {} gebunden.", "MiniUtil_Script");
 	return true;
 }
 

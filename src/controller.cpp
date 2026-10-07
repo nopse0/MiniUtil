@@ -3,9 +3,7 @@
 #include "actor_util.h"
 #include "form_cache.h"
 #include "controller.h"
-
-#include <algorithm>
-#include <cmath>
+#include "sl_scenes.h"
 
 namespace controller {
 
@@ -16,7 +14,7 @@ namespace controller {
         RE::TESObjectCELL* a_targetCell,
         RE::TESWorldSpace* a_selfWorldSpace,
         const RE::NiPoint3& a_position,
-         const RE::NiPoint3& a_rotation)
+        const RE::NiPoint3& a_rotation)
     {
         if (!a_this) return;
 
@@ -113,14 +111,23 @@ namespace controller {
                 it = _scheduledTasks.erase(it);
                 try {
                     if (fn) fn();
-                } catch (const std::exception& e) {
+                }
+                catch (const std::exception& e) {
                     logger::error("Scheduled task threw exception: {}", e.what());
-                } catch (...) {
+                }
+                catch (...) {
                     logger::error("Scheduled task threw unknown exception");
                 }
-            } else {
+            }
+            else {
                 ++it;
             }
+        }
+
+        // no actions, until unfinished tasks are completed
+        if (_scheduledTasks.size() > 0) {
+            logger::trace("on_timer_tick aborted, scheduled tasks pending: {}", _scheduledTasks.size());
+            return;
         }
 
         if (!is_playing()) {
@@ -181,22 +188,66 @@ namespace controller {
                     _busy = false;
                     _state = state_t::Idle;
                     set_event_success_min_delays();
+                    if (_back_hug_actor_ref_handle) {
+                        logger::debug("Struggle minigame finished, stopping back-hug");
+                        auto actorPtr = RE::Actor::LookupByHandle(_back_hug_actor_ref_handle);
+                        if (!actorPtr) {
+                            logger::warn("stop back hug: actor lookup failed");
+                            return;
+                        }
+                        _back_hug_actor_ref_handle = RE::RefHandle(0);
+                        stop_back_hug(actorPtr.get());
+
+                        if (stat == minigame::struggle_game::state::lost) {
+							_busy = true;
+							_state = state_t::InScene;
+							std::vector<RE::Actor*> actors;
+                            std::vector<RE::Actor*> submissives;
+                            auto player = RE::PlayerCharacter::GetSingleton();
+                            actors.push_back(player);
+							actors.push_back(actorPtr.get());
+                            submissives.push_back(player);
+							sl_scenes::sl_scene::get_instance().trigger_scene(actors, submissives);
+                        }
+
+                    }
+                    else {
+                        logger::warn("Struggle minigame finished, but no back-hug actor handle stored");
+                    }
                 }
             }
         }
 
     }
 
-    void controller::start_back_hug(RE::Actor* a_actor) {
+    void controller::on_dialog_end(RE::Actor* a_speaker) {
+        if (_state != state_t::ForceGreet || _force_greet_actor != a_speaker) {
+            logger::warn("on_dialog_end called but state is not ForceGreet or actor does not match, ignoring");
+            return;
+        }
+
+        auto outcome = form_cache::MiniMolestForceGreetOutcome->value;
+        form_cache::MiniMolestForceGreetType->value = 0.f;
+        form_cache::MiniMolestForceGreetOutcome->value = 0.f;
+
+        if (outcome == 1.f) {
+            logger::info("Dialogue ended with actor {}, starting struggle minigame", (void*)a_speaker);
+            _state = state_t::Struggle;
+            _back_hug_actor_ref_handle = start_back_hug(a_speaker);
+            minigame::struggle_game::get_instance().start(_struggle_timeout_seconds);
+        }
+    }
+
+    RE::RefHandle controller::start_back_hug(RE::Actor* a_actor) {
         if (!a_actor) {
             logger::warn("start_back_hug: a_actor is null");
-            return;
+            return RE::RefHandle(0);
         }
 
         auto player = RE::PlayerCharacter::GetSingleton();
         if (!player) {
             logger::warn("start_back_hug: player singleton missing");
-            return;
+            return RE::RefHandle(0);
         }
 
         // 1) Package override + force package evaluation
@@ -265,7 +316,7 @@ namespace controller {
 
             auto markerPos = form_cache::MiniMolestAnimMarker->GetPosition();
             logger::info("[scheduled] marker moved. markerPos={:.2f},{:.2f},{:.2f}", markerPos.x, markerPos.y, markerPos.z);
-        });
+            });
 
         // Wait another 0.5s then Move actor to marker and set angle (papyrus: akactor.MoveTo(MiniMolestAnimMarker); akactor.setangle(...))
         schedule_task_after_play_seconds(1.0f, [actorRefHandle, AngleZ_raw]() {
@@ -277,7 +328,8 @@ namespace controller {
 
             if (form_cache::MiniMolestAnimMarker) {
                 actorPtr->MoveTo(form_cache::MiniMolestAnimMarker);
-            } else {
+            }
+            else {
                 logger::warn("scheduled: MiniMolestAnimMarker not cached for actor move");
             }
 
@@ -289,27 +341,50 @@ namespace controller {
             if (auto playerLocal = RE::PlayerCharacter::GetSingleton()) {
                 playerLocal->NotifyAnimationGraph("BaboBackHugStartF");
             }
-        });
+            });
 
         logger::info("start_back_hug: scheduled back hug sequence for actor {}", (void*)a_actor);
+        return actorRefHandle;
     }
 
-    void controller::on_dialog_end(RE::Actor* a_speaker) {
-        if (_state != state_t::ForceGreet || _force_greet_actor != a_speaker) {
-            logger::warn("on_dialog_end called but state is not ForceGreet or actor does not match, ignoring");
+    void controller::stop_back_hug(RE::Actor* a_actor) {
+        if (!a_actor) {
+            logger::warn("stop_back_hug: null actor");
             return;
         }
 
-        auto outcome = form_cache::MiniMolestForceGreetOutcome->value;
-        form_cache::MiniMolestForceGreetType->value = 0.f;
-        form_cache::MiniMolestForceGreetOutcome->value = 0.f;
-
-        if (outcome == 1.f) {
-            logger::info("Dialogue ended with actor {}, starting struggle minigame", (void*)a_speaker);
-            _state = state_t::Struggle;
-            start_back_hug(a_speaker);
-            minigame::struggle_game::get_instance().start(_struggle_timeout_seconds);
+        auto player = RE::PlayerCharacter::GetSingleton();
+        if (!player) {
+            logger::warn("end_back_hug: player singleton missing");
+            return;
         }
-    }
 
+        // Optional: Falls eure SDK/Headers SetVehicle anbieten, könnt ihr das aktivieren:
+        // player->SetVehicle(nullptr);
+        // a_actor->SetVehicle(nullptr);
+
+        // Entferne das DoNothing-Package-Override, falls gesetzt
+        actor_util::remove_package_override(a_actor, form_cache::MiniMolestDoNothingPackage);
+
+        // Setze LifeState und Movement-Flag zurück
+        a_actor->SetLifeState(RE::ACTOR_LIFE_STATE::kAlive);
+        a_actor->GetActorRuntimeData().boolFlags.reset(RE::Actor::BOOL_FLAGS::kMovementBlocked);
+        a_actor->StopMoving(0.0f);
+
+        // Re-aktiviere Player Controls und AIDriven-Status zurücksetzen
+        player->SetPlayerControls(true);
+        // Falls ihr Game.SetPlayerAIDriven(true) gesetzt habt, müsst ihr ggf. den Game-/Player-AI-Status zurücksetzen.
+        // (In start_back_hug haben wir nur SetPlayerControls(false) verwendet.)
+
+        // Gib dem Actor wieder seine AI-Pakete
+        a_actor->EvaluatePackage(true, false);
+
+        // Ziehe beide Skeletons aus der gepaarten Pose
+        a_actor->NotifyAnimationGraph("IdleForceDefaultState");
+        if (auto playerLocal = RE::PlayerCharacter::GetSingleton()) {
+            playerLocal->NotifyAnimationGraph("IdleForceDefaultState");
+        }
+
+        logger::info("stop_back_hug: restored actor {} and re-enabled player controls", (void*)a_actor);
+    }
 }

@@ -7,7 +7,8 @@ namespace controller {
 	enum class state_t {
 		Idle,
 		ForceGreet,
-		Struggle
+		Struggle,
+		InScene
 	};
 
 
@@ -17,7 +18,7 @@ namespace controller {
 		float _event_min_success_delay_play_seconds = 60.f;
 		float _event_min_failure_delay_play_seconds = 20.f;   // some cooldown after a failed force greet attempt, to prevent race conditions
 		float _force_greet_timeout_play_seconds = 30.f;
-		int _struggle_timeout_seconds = 10;
+		int _struggle_timeout_seconds = 20;
 
 	private:
 		state_t _state = state_t::Idle;
@@ -31,6 +32,7 @@ namespace controller {
 		float _next_event_min_play_second = 0.f;
 		float _force_greet_start_play_second = 0.f;
 		RE::Actor* _force_greet_actor = nullptr;	
+		RE::RefHandle _back_hug_actor_ref_handle = RE::RefHandle(0);
 
 		// Scheduler
 		struct ScheduledTask {
@@ -48,8 +50,8 @@ namespace controller {
 		void set_event_success_min_delays();
 		void set_event_failure_min_delays();
 		void on_dialog_end(RE::Actor* a_speaker);
-		void start_back_hug(RE::Actor* a_actor);
-		void end_back_hug(RE::Actor* a_actor);
+		RE::RefHandle start_back_hug(RE::Actor* a_actor);
+		void stop_back_hug(RE::Actor* a_actor);
 
 		// Scheduling API
 		void schedule_task_after_play_seconds(float a_delay, std::function<void()> a_fn);

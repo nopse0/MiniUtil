@@ -133,5 +133,3 @@ bool CanSafeInteractWithActor(RE::Actor* a_actor)
     return true; // NPC ist frei oder die blockierende Mod ist unkritisch!
 }
 
-
-
