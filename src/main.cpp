@@ -3,6 +3,7 @@
 #include "actor_util.h"
 #include "controller.h"
 #include "sl_scenes.h"
+#include "random.h"
 
 namespace main_loop {
 	void install();
@@ -245,17 +246,114 @@ void InitializeForms() {
 }
 
 
+void InitializeSerialization()
+{
+	// Deine internen Subtypes (als 4-Byte-Integers deklariert)
+	enum class module_id_t : std::uint32_t {
+		RandomGenerator = 'RNDM',
+		Controller = 'CTRL',
+	};
+
+
+	auto serialization = SKSE::GetSerializationInterface();
+	if (!serialization) {
+		logger::error("Serialization Interface konnte nicht geladen werden!");
+		return;
+	}
+
+	serialization->SetRevertCallback([](SKSE::SerializationInterface*) {
+		logger::debug("SKSE::RevertCallback");
+		random::random::get_instance().reset();
+		sl_scenes::sl_scene::get_instance().reset();
+		controller::controller::get_instance().reset();
+	});
+
+	serialization->SetSaveCallback([](SKSE::SerializationInterface* a_serde) {
+		logger::debug("SKSE::SaveCallback");
+		if (!a_serde->OpenRecord('MMST', 1)) {
+			logger::error("Konnte Haupt-Record nicht öffnen!");
+			return;
+		}
+
+		auto module = module_id_t::RandomGenerator;
+		a_serde->WriteRecordData(&module, sizeof(module));
+		random::random::get_instance().serialize(a_serde);
+	});
+
+	serialization->SetLoadCallback([](SKSE::SerializationInterface* a_serde) {
+		std::uint32_t type;
+		std::uint32_t version;
+		std::uint32_t length;
+
+		logger::debug("SKSE::LoadCallback");
+		// SKSE sucht nach unserem Haupt-Eintrag
+		while (a_serde->GetNextRecordInfo(type, version, length)) {
+			if (type == 'MMST' && version == 1) {
+
+				std::uint32_t bytesRead = 0;
+
+				// Schleife läuft, solange wir noch nicht die gesamte 'length' des Records gelesen haben
+				while (bytesRead < length) {
+					std::uint32_t subTypeRaw = 0;
+					if (!a_serde->ReadRecordData(&subTypeRaw, sizeof(subTypeRaw))) {
+						break; // Fehler oder Ende des Records erreicht
+					}
+					bytesRead += sizeof(subTypeRaw);
+
+					module_id_t currentSub = static_cast<module_id_t>(subTypeRaw);
+
+					switch (currentSub) {
+					case module_id_t::RandomGenerator:
+						bytesRead += random::random::get_instance().deserialize(a_serde);
+						break;
+
+					case module_id_t::Controller:
+						// AnimationManager::Get().Deserialize(a_serde);
+						break;
+
+					default:
+						logger::error("Unbekannter Subtype im MMST-Record gefunden! Breche Laden ab, um Korruption zu verhindern.");
+						return;
+					}
+				}
+			}
+		}
+		});
+}
+
+void RegisterForModEvents() {
+	auto eventSource = SKSE::GetModCallbackEventSource();
+	if (eventSource) {
+		// Wir fügen unseren Callback hinzu.
+		// Wichtig: Die Engine löscht diese Zuweisung bei jedem Ladebildschirm!
+		eventSource->AddEventSink(&controller::controller::get_instance());
+		logger::info("Erfolgreich für Framework Mod Events registriert.");
+	}
+}
+
+
 // 3. Der Message Listener
 void OnSKSEMessage(SKSE::MessagingInterface::Message* a_msg)
 {
-	void ActorUtilAddresses();
+	switch (a_msg->type) {
+	case SKSE::MessagingInterface::kNewGame:
+		random::random::get_instance().new_game();
+		RegisterForModEvents();
+		break;
 
-	if (a_msg->type == SKSE::MessagingInterface::kDataLoaded) {
+	case SKSE::MessagingInterface::kPostLoad:
+		InitializeSerialization();
+		RegisterForModEvents();
+		break;
+
+	case SKSE::MessagingInterface::kDataLoaded:
 		InitializeForms();
 		main_loop::install();
 		actor_util::internal::initialize();
+		break;
 	}
 }
+
 
 // Der SKSE Einstiegspunkt
 extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface* a_skse) {

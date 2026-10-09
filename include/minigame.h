@@ -18,6 +18,7 @@ namespace minigame {
 
         state get_state();
         void start(int a_timeout_seconds = 5);
+		void reset();
         bool on_input(RE::InputEvent* a_event);
         void render();
     };

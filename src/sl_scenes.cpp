@@ -1,17 +1,21 @@
 #include "papyrus_utils.h"
+#include "random.h"
 #include "sl_scenes.h"
 
 namespace sl_scenes {
 
-	static float new_handle()
+	void sl_scene::reset()
 	{
-		static float last_handle = 0.f;
-		return last_handle++;
+		logger::debug("sl_scene::reset");
+		_handle = random::random::get_instance().gen_float(1.f, 10000.f);
+		_actors.clear();
+		_submissive_actors.clear();
+		uint32_t _sl_thread_id = 0;
 	}
 
 	bool sl_scene::set_thread_id(float a_handle, uint32_t a_sl_thread_id)
 	{
-		logger::debug("set_thread_id");
+		logger::debug("sl_scene::set_thread_id");
 
 		if (a_handle != _handle)
 			return false;
@@ -22,7 +26,7 @@ namespace sl_scenes {
 
 	bool sl_scene::get_scene_parameters(RE::TESQuest* a_this, float a_handle)
 	{
-		logger::info("get_scene_parameters");
+		logger::info("sl_scene::get_scene_parameters");
 
 		if (!a_this)
 			return false;
@@ -77,9 +81,9 @@ namespace sl_scenes {
 
 	bool sl_scene::trigger_scene(std::vector<RE::Actor*> a_actors, std::vector<RE::Actor*> a_submissive_actors)
 	{
-		logger::debug("trigger_scene");
+		logger::debug("sl_scene::trigger_scene");
 
-		_handle = new_handle();
+		_handle++;
 		_actors = a_actors;
 		_submissive_actors = a_submissive_actors;
 

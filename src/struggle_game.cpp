@@ -10,6 +10,10 @@ namespace minigame {
         _state.store(state::playing, std::memory_order_release);
     }
 
+    void struggle_game::reset() {
+        _state.store(state::idle, std::memory_order_relaxed);
+    }
+
     bool struggle_game::on_input(RE::InputEvent* a_event) {
         if (_state.load(std::memory_order_relaxed) != state::playing) {
             return false;
@@ -25,8 +29,9 @@ namespace minigame {
                             _state.store(state::won, std::memory_order_relaxed);
                         }
                     }
-                    return true;
                 }
+				// eat up all keyboard events, so the player isn't able to save/load/return to main menu
+                return true;
             }
         }
 		return false;

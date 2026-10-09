@@ -6,7 +6,8 @@ namespace main_loop {
     {
     public:
         static constexpr int _frame_rate = 60;
-		static constexpr int _tick_interval_in_frames = _frame_rate * 3600 / controller::controller::timer_ticks_per_hour(); // 1 frame = 1/60th of a second (approx.)
+		// static constexpr int _tick_interval_in_frames = _frame_rate * 3600 / controller::controller::timer_ticks_per_hour(); // 1 frame = 1/60th of a second (approx.)
+        static constexpr int _tick_interval_in_frames = 1;
 
         static void hook()
         {
