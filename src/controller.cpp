@@ -134,7 +134,7 @@ namespace controller {
         _scheduledTasks.emplace_back(std::move(t));
     }
 
-    #pragma optimize("", off)
+    //#pragma optimize("", off)
 
     RE::BSEventNotifyControl controller::ProcessEvent(const SKSE::ModCallbackEvent* a_event, RE::BSTEventSource<SKSE::ModCallbackEvent>* a_eventSource)
     {
@@ -145,6 +145,7 @@ namespace controller {
 
             // concurrency crash test => result: ProcessEvent and on_timer_tick are not concurrent!
             // volatile double crunch = *_concurrencyTestData;
+            // delete _concurrencyTestData;
             // _concurrencyTestData = nullptr;
             // logger::debug("concurrency: calculate crunch start");
             // auto startTime = std::chrono::high_resolution_clock::now();
@@ -169,7 +170,7 @@ namespace controller {
         // Concurrency crash test
         //logger::debug("concurrency: read crunch start");
         //auto crunch = *_concurrencyTestData;
-        //logger::debug("concurrency: read crunch end");
+        //logger::debug("concurrency: read crunch end, crunch = {}", crunch);
 
         // advance time first (so scheduling uses same time base as Papyrus Wait)
         update_play_second(a_play_time_delta_seconds);
@@ -291,7 +292,7 @@ namespace controller {
         }
 
     }
-    #pragma optimize("", on)
+    // #pragma optimize("", on)
 
 
     void controller::on_dialog_end(RE::Actor* a_speaker) {

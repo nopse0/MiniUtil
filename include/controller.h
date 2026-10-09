@@ -43,7 +43,7 @@ namespace controller {
 		std::vector<ScheduledTask> _scheduledTasks;
 
 		// Concurrency CTD test, is synchronization neccessary or not, when processing mod events
-		// double* _concurrencyTestData = new double(1.0);
+		//double* _concurrencyTestData = new double(1.0);
 
 	public:
 		void reset();
