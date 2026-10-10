@@ -45,17 +45,19 @@ namespace random {
 
     // Den Zustand aus dem Savegame wiederherstellen
     uint32_t random::deserialize(SKSE::SerializationInterface* a_serde) {
+        std::uint32_t readBytes = 0;
+
         std::uint32_t size = 0;
-        a_serde->ReadRecordData(&size, sizeof(size));
+        readBytes += a_serde->ReadRecordData(&size, sizeof(size));
 
         std::string stateStr;
         stateStr.resize(size);
-        a_serde->ReadRecordData(stateStr.data(), size);
+        readBytes += a_serde->ReadRecordData(stateStr.data(), size);
 
         std::stringstream ss(stateStr);
         ss >> _generator; // Stellt den exakten Zustand des Generators wieder her!
 
-        return size;
+        return readBytes;
     }
 
     // Falls ein neues Spiel gestartet wird: Hier darf random_device einmalig laufen

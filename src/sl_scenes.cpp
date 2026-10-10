@@ -4,13 +4,14 @@
 
 namespace sl_scenes {
 
-	void sl_scene::reset()
+	void sl_scene::revert()
 	{
 		logger::debug("sl_scene::reset");
 		_handle = random::random::get_instance().gen_float(1.f, 10000.f);
 		_actors.clear();
 		_submissive_actors.clear();
-		uint32_t _sl_thread_id = 0;
+		_sl_thread_id = 0;
+		_error = false;
 	}
 
 	bool sl_scene::set_thread_id(float a_handle, uint32_t a_sl_thread_id)
@@ -21,6 +22,16 @@ namespace sl_scenes {
 			return false;
 		_sl_thread_id = a_sl_thread_id;
 		logger::debug("sl_thread_id = {}", _sl_thread_id);
+		return true;
+	}
+
+	bool sl_scene::set_error(float a_handle)
+	{
+		logger::debug("sl_scene::set_error");
+
+		if (a_handle != _handle)
+			return false;
+		_error = true;
 		return true;
 	}
 
@@ -79,17 +90,19 @@ namespace sl_scenes {
 		return true;
 	}
 
-	bool sl_scene::trigger_scene(std::vector<RE::Actor*> a_actors, std::vector<RE::Actor*> a_submissive_actors)
+	bool sl_scene::trigger_scene(std::vector<RE::Actor*> a_actors, std::vector<RE::Actor*> a_submissive_actors, const std::string& a_hook_postfix)
 	{
 		logger::debug("sl_scene::trigger_scene");
 
 		_handle++;
+		_sl_thread_id = 0;
+		_error = false;
 		_actors = a_actors;
 		_submissive_actors = a_submissive_actors;
 
 		SKSE::ModCallbackEvent modEvent;
 		modEvent.eventName = RE::BSFixedString("MiniUtilStartScene");
-		modEvent.strArg = RE::BSFixedString("");
+		modEvent.strArg = a_hook_postfix;
 		modEvent.numArg = _handle;
 		modEvent.sender = nullptr;
 

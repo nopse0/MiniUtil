@@ -4,7 +4,7 @@
 #include <vector>
 
 namespace controller {
-	enum class state_t {
+	enum class state_t : uint8_t {
 		Idle,
 		ForceGreet,
 		Struggle,
@@ -22,6 +22,7 @@ namespace controller {
 		float _force_greet_timeout_play_seconds = 30.f;
 		int _struggle_timeout_seconds = 20;
 		double _base_event_chance_per_hour = 0.1; // 10% chance per hour
+		float _scene_timeout_play_seconds = 180.f;
 
 	private:
 		// State which has to be persisted across game saves
@@ -31,20 +32,24 @@ namespace controller {
 		float _next_event_min_game_day = 0.f;
 		float _next_event_min_play_second = 0.f;
 		float _force_greet_start_play_second = 0.f;
-		RE::ActorHandle _force_greet_actor_handle;   // = RE::RefHandle(0);   // Careful, we changed the AI package of these actors
-		
+		RE::ActorHandle _force_greet_actor_handle;   // Careful, we changed the AI package of these actor
+
 		// Temporary state	
-		RE::ActorHandle _back_hug_actor_ref_handle;    // = RE::RefHandle(0);
+		RE::ActorHandle _back_hug_actor_handle;
 		// Scheduler
 		struct ScheduledTask {
 			float execute_play_second;
 			std::function<void()> fn;
 		};
 		std::vector<ScheduledTask> _scheduledTasks;
+		uint8_t _sl_hook_id = 0;
+		RE::BSFixedString _sl_hook_name;
+		float _scene_start_play_second = 0.f;
 
 	public:
-		void reset();
-		void save(SKSE::SerializationInterface* a_serde);
+		void revert();
+		void serialize(SKSE::SerializationInterface* a_serde);
+		uint32_t deserialize(SKSE::SerializationInterface* a_serde);
 
 		void on_timer_tick(float a_play_time_delta_seconds);
 		virtual RE::BSEventNotifyControl ProcessEvent(const SKSE::ModCallbackEvent* a_event, RE::BSTEventSource<SKSE::ModCallbackEvent>* a_eventSource);
@@ -55,6 +60,8 @@ namespace controller {
 		void on_dialog_end(RE::Actor* a_speaker);
 		RE::ActorHandle start_back_hug(RE::Actor* a_actor);
 		void stop_back_hug(RE::Actor* a_actor);
+		std::string next_sl_hook();
+		void goto_idle_state();
 
 		// Scheduling API
 		void schedule_task_after_play_seconds(float a_delay, std::function<void()> a_fn);

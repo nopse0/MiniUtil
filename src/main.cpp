@@ -190,6 +190,10 @@ bool MiniUtil_SetSceneThreadID(RE::StaticFunctionTag*, float handle, uint32_t th
 	return sl_scenes::sl_scene::get_instance().set_thread_id(handle, threadId);
 }
 
+bool MiniUtil_SetSceneError(RE::StaticFunctionTag*, float handle)
+{
+	return sl_scenes::sl_scene::get_instance().set_error(handle);
+}
 
 bool RegisterPapyrusFunctions(RE::BSScript::IVirtualMachine* vm)
 {
@@ -198,6 +202,7 @@ bool RegisterPapyrusFunctions(RE::BSScript::IVirtualMachine* vm)
 	vm->RegisterFunction("OnDialogEnd", "MiniUtil_Script", MiniUtil_OnDialogEnd);
 	vm->RegisterFunction("GetSceneParameters", "MiniMolestMain_Script", MiniMolest_GetSceneParameters);
 	vm->RegisterFunction("SetSceneThreadID", "MiniUtil_Script", MiniUtil_SetSceneThreadID);
+	vm->RegisterFunction("SetSceneError", "MiniUtil_Script", MiniUtil_SetSceneError);
 
 	return true;
 }
@@ -261,11 +266,13 @@ void InitializeSerialization()
 		return;
 	}
 
+	serialization->SetUniqueID('MMST');
+
 	serialization->SetRevertCallback([](SKSE::SerializationInterface*) {
 		logger::debug("SKSE::RevertCallback");
 		random::random::get_instance().reset();
-		sl_scenes::sl_scene::get_instance().reset();
-		controller::controller::get_instance().reset();
+		// sl_scenes::sl_scene::get_instance().revert();  // managed by controller
+		controller::controller::get_instance().revert();
 	});
 
 	serialization->SetSaveCallback([](SKSE::SerializationInterface* a_serde) {
@@ -278,6 +285,10 @@ void InitializeSerialization()
 		auto module = module_id_t::RandomGenerator;
 		a_serde->WriteRecordData(&module, sizeof(module));
 		random::random::get_instance().serialize(a_serde);
+
+		module = module_id_t::Controller;
+		a_serde->WriteRecordData(&module, sizeof(module));
+		controller::controller::get_instance().serialize(a_serde);
 	});
 
 	serialization->SetLoadCallback([](SKSE::SerializationInterface* a_serde) {
@@ -289,8 +300,12 @@ void InitializeSerialization()
 		// SKSE sucht nach unserem Haupt-Eintrag
 		while (a_serde->GetNextRecordInfo(type, version, length)) {
 			if (type == 'MMST' && version == 1) {
+				logger::debug("Found record info of type 'MMST', length = {}", length);
 
 				std::uint32_t bytesRead = 0;
+
+				bool randomGeneratorRead = false;
+				bool controllerRead = false;
 
 				// Schleife läuft, solange wir noch nicht die gesamte 'length' des Records gelesen haben
 				while (bytesRead < length) {
@@ -304,11 +319,19 @@ void InitializeSerialization()
 
 					switch (currentSub) {
 					case module_id_t::RandomGenerator:
+						if (randomGeneratorRead) {
+							logger::error("Save game contains multiple RandomGenerator records!");
+						}
 						bytesRead += random::random::get_instance().deserialize(a_serde);
+						randomGeneratorRead = true;
 						break;
 
 					case module_id_t::Controller:
-						// AnimationManager::Get().Deserialize(a_serde);
+						if (controllerRead) {
+							logger::error("Save game contains multiple Controller records!");
+						}
+						bytesRead += controller::controller::get_instance().deserialize(a_serde);
+						controllerRead = true;
 						break;
 
 					default:
@@ -316,6 +339,11 @@ void InitializeSerialization()
 						return;
 					}
 				}
+				if (bytesRead != length || randomGeneratorRead == false || controllerRead == false) {
+					logger::error("Save game corruption! bytesRead={},  randomGeneratorRead={}, controllerRead={}", 
+						bytesRead, randomGeneratorRead, controllerRead);
+				}
+				logger::info("Record 'MMST' read from save game.");
 			}
 		}
 		});

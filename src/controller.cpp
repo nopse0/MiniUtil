@@ -68,42 +68,107 @@ namespace controller {
         return calendar->GetDaysPassed();
     }
 
-    void controller::reset() {
+    // Tries to restore the pristine state directly after construction (before 'new game'/'load game')
+    void controller::revert() {
         logger::debug("resetting");
         if (_state == state_t::Struggle) {
             logger::warn("Resetting controller while in Struggle state. This may leave the game in an inconsistent state.");
             minigame::struggle_game::get_instance().reset();
             _scheduledTasks.clear();
-            if (_back_hug_actor_ref_handle) {
+            if (_back_hug_actor_handle) {
                 logger::debug("reset: stopping back-hug");
-                auto actorPtr = _back_hug_actor_ref_handle.get();   // RE::Actor::LookupByHandle(_back_hug_actor_ref_handle);
+                auto actorPtr = _back_hug_actor_handle.get();   // RE::Actor::LookupByHandle(_back_hug_actor_ref_handle);
                 if (!actorPtr) {
                     logger::warn("stop back hug: actor lookup failed");
-                    return;
+                } else {
+                    stop_back_hug(actorPtr.get());
                 }
-                _back_hug_actor_ref_handle.reset();   // = RE::RefHandle(0);
-                stop_back_hug(actorPtr.get());
+                _back_hug_actor_handle.reset();   // = RE::RefHandle(0);
             }
         }
-        // state_t::InScene:   nothing to do
-     
+        else if (_state == state_t::InScene) {
+            sl_scenes::sl_scene::get_instance().revert();
+        }
+
+        goto_idle_state();
+
+        // Factory defaults
+        _next_event_min_game_day = 0.f;
+        _next_event_min_play_second = 0.f;
+        _play_second = 0.f;
+    }
+
+    // Cleans temporary variables and sets state to Idle 
+    void controller::goto_idle_state() 
+    {
         // Default state
         _state = state_t::Idle;
         _busy = false;
-        _next_event_min_game_day = 0.f;
-        _next_event_min_play_second = 0.f;
         _force_greet_start_play_second = 0.f;
-        _force_greet_actor_handle.reset(); //= nullptr;
-        _back_hug_actor_ref_handle.reset();      //RE::RefHandle(0);
+        _force_greet_actor_handle.reset();
+
+        _scene_start_play_second = 0.f;
+        _back_hug_actor_handle.reset();
+        _sl_hook_id = 0;  // because of the delays between events, there should be no collisions with older hook calls, when loading a previous game, I think
         _scheduledTasks.clear();
-
     }
 
-    void save(SKSE::SerializationInterface* a_serde)
+    void controller::serialize(SKSE::SerializationInterface* a_serde)
     {
+        a_serde->WriteRecordData(&_play_second, sizeof(_play_second));
+        a_serde->WriteRecordData(&_next_event_min_game_day, sizeof(_next_event_min_game_day));
+        a_serde->WriteRecordData(&_next_event_min_play_second, sizeof(_next_event_min_play_second));
 
+        // Remark: The InScene state is persisted, but when loading the game, it will immediately timeout (because we don't persist the scene start time), and Idle state
+        // will be entered (with the min failed event delay for the next event)
+        if (_state != state_t::Idle && _state != state_t::ForceGreet)
+            logger::error("controller::save: we shouldn't be in state {} here, this won't work!", static_cast<uint8_t>(_state));
+        a_serde->WriteRecordData(&_state, sizeof(_state));
+        uint8_t bool_byte = static_cast<uint8_t>(_busy);
+        a_serde->WriteRecordData(&bool_byte, sizeof(bool_byte));
+        a_serde->WriteRecordData(&_force_greet_start_play_second, sizeof(_force_greet_start_play_second));
+
+        RE::FormID formId = 0;
+        auto actorPtr = _force_greet_actor_handle.get();
+        if (actorPtr) {
+            formId = actorPtr->GetFormID();
+        }
+        a_serde->WriteRecordData(&formId, sizeof(formId));
     }
 
+    uint32_t controller::deserialize(SKSE::SerializationInterface* a_serde)
+    {
+        uint32_t read = 0;
+        read += a_serde->ReadRecordData(&_play_second, sizeof(_play_second));
+        read += a_serde->ReadRecordData(&_next_event_min_game_day, sizeof(_next_event_min_game_day));
+        read += a_serde->ReadRecordData(&_next_event_min_play_second, sizeof(_next_event_min_play_second));
+    
+        read += a_serde->ReadRecordData(&_state, sizeof(_state));
+        uint8_t bool_byte;
+        read += a_serde->ReadRecordData(&bool_byte, sizeof(bool_byte));
+        _busy = bool_byte;
+        read += a_serde->ReadRecordData(&_force_greet_start_play_second, sizeof(_force_greet_start_play_second));
+  
+        RE::FormID savedFormID = 0;     // Lot of boiler-plate code for serializing actor handles
+        read += a_serde->ReadRecordData(&savedFormID, sizeof(savedFormID));
+        if (savedFormID != 0) {
+            RE::FormID resolvedFormID = 0;
+            // CRITICAL: SKSE korrigiert hier die FormID basierend auf der aktuellen Load-Order!
+            if (a_serde->ResolveFormID(savedFormID, resolvedFormID)) {
+
+                // Hole das Objekt über die korrigierte FormID
+                auto refr = RE::TESForm::LookupByID<RE::Actor>(resolvedFormID);
+                if (refr) {
+                    // Erstelle wieder dein sicheres ObjectRefHandle für deine Klasse
+                    _force_greet_actor_handle = refr->GetHandle();   // savedFormID == 0 is handled in 'revert', don't have to do this here
+                }
+            }
+        }
+        else {   // but safe is safe :)
+            _force_greet_actor_handle.reset();
+        }
+        return read;
+    }
 
     void controller::update_play_second(float a_play_time_delta_seconds) {
         _play_second += a_play_time_delta_seconds;
@@ -111,12 +176,14 @@ namespace controller {
 
     void controller::set_event_success_min_delays()
     {
+        logger::debug("controller::set_event_success_min_delays");
         _next_event_min_game_day = get_game_day() + _event_min_success_delay_game_days;
         _next_event_min_play_second = get_play_second() + _event_min_success_delay_play_seconds;
     }
 
     void controller::set_event_failure_min_delays()
     {
+        logger::debug("controller::set_event_failure_min_delays");
         _next_event_min_play_second = get_play_second() + _event_min_failure_delay_play_seconds;
     }
 
@@ -134,21 +201,34 @@ namespace controller {
         _scheduledTasks.emplace_back(std::move(t));
     }
 
+    std::string controller::next_sl_hook()
+    {
+        if (_sl_hook_id < 255)
+            _sl_hook_id++;
+        else
+            _sl_hook_id = 1;
+        auto postfix = std::format("MiniMolest{:02X}", _sl_hook_id);
+        _sl_hook_name = "AnimationEnd_" + postfix;
+        return postfix;
+    }
+
     RE::BSEventNotifyControl controller::ProcessEvent(const SKSE::ModCallbackEvent* a_event, RE::BSTEventSource<SKSE::ModCallbackEvent>* a_eventSource)
     {
-        logger::debug(" controller::ProcessEvent a_event = {}", (void*)a_event);
-        if (a_event) {
-            std::string eventName = a_event->eventName.c_str();
-            logger::debug("ProcessEvent: eventName = {}", eventName);
+        if (a_event && _sl_hook_id > 0) {
+            logger::trace("ProcessEvent: eventName = {}", a_event->eventName.c_str());
 
-
+            if (a_event->eventName == _sl_hook_name) {
+                logger::debug("controller::ProcessEvent: AnimationEnd event received: {}", _sl_hook_name.c_str());
+                goto_idle_state();
+                set_event_success_min_delays();
+            }
         }
-        return  RE::BSEventNotifyControl::kContinue;
+        return RE::BSEventNotifyControl::kContinue;
     }
     
     void controller::on_timer_tick(float a_play_time_delta_seconds)
     {
-        logger::trace("Controller received timer tick");
+        logger::trace("Controller received timer tick, time delta = {}", a_play_time_delta_seconds);
 
         // advance time first (so scheduling uses same time base as Papyrus Wait)
         update_play_second(a_play_time_delta_seconds);
@@ -209,7 +289,7 @@ namespace controller {
                     form_cache::MiniMolestForceGreetType->value = 1.f;
                     form_cache::MiniMolestForceGreetOutcome->value = 1.f;
                     RE::Actor* actor = males[0].second;
-                    _force_greet_actor_handle = actor->GetHandle();    //.native_handle();
+                    _force_greet_actor_handle = actor->GetHandle();
                     actor_util::add_package_override(actor, form_cache::MiniMolestForceGreetPackage, 100, 1);
                     logger::info("Started ForceGreet package on actor {}", (void*)actor);
                     actor->EvaluatePackage(true, false);
@@ -220,37 +300,35 @@ namespace controller {
             if (_state == state_t::ForceGreet) {
                 if (get_play_second() - _force_greet_start_play_second > _force_greet_timeout_play_seconds) {
                     logger::debug("ForceGreet timeout reached, removing package override and resetting state");
-                    _busy = false;
-                    _state = state_t::Idle;
-                    auto actorPtr = _force_greet_actor_handle.get();  //RE::Actor::LookupByHandle(_force_greet_actor_handle);
+                    auto actorPtr = _force_greet_actor_handle.get();
                     if (actorPtr) {
                         auto actor = actorPtr.get();
                         actor_util::remove_package_override(actor, form_cache::MiniMolestForceGreetPackage);
                         actor->EvaluatePackage(true, false);
                     }
-                    _force_greet_actor_handle.reset();  // = RE::RefHandle(0);
+                    goto_idle_state();
                     set_event_failure_min_delays();
                 }
             }
             else if (_state == state_t::Struggle) {
                 auto stat = minigame::struggle_game::get_instance().get_state();
                 if (stat != minigame::struggle_game::state::playing) {
-                    logger::debug("Struggle minigame finished, resetting state");
-                    _busy = false;
-                    _state = state_t::Idle;
-                    set_event_success_min_delays();
-                    if (_back_hug_actor_ref_handle) {
+                    logger::debug("Struggle minigame finished");
+                    //_busy = false;
+                    //_state = state_t::Idle;
+                    //set_event_success_min_delays();
+                    if (_back_hug_actor_handle) {
                         logger::debug("Struggle minigame finished, stopping back-hug");
-                        auto actorPtr = _back_hug_actor_ref_handle.get();  // RE::Actor::LookupByHandle(_back_hug_actor_ref_handle);
+                        auto actorPtr = _back_hug_actor_handle.get();
                         if (!actorPtr) {
                             logger::warn("stop back hug: actor lookup failed");
                             return;
                         }
-                        _back_hug_actor_ref_handle.reset();   // = RE::RefHandle(0);
+                        //_back_hug_actor_ref_handle.reset();
                         stop_back_hug(actorPtr.get());
 
                         if (stat == minigame::struggle_game::state::lost) {
-							_busy = true;
+							//_busy = true;
 							_state = state_t::InScene;
 							std::vector<RE::Actor*> actors;
                             std::vector<RE::Actor*> submissives;
@@ -258,15 +336,29 @@ namespace controller {
                             actors.push_back(player);
 							actors.push_back(actorPtr.get());
                             submissives.push_back(player);
-							sl_scenes::sl_scene::get_instance().trigger_scene(actors, submissives);
+                            auto hookPostfix = next_sl_hook();
+                            _scene_start_play_second = get_play_second();
+							sl_scenes::sl_scene::get_instance().trigger_scene(actors, submissives, hookPostfix);
                         }
-
+                        else {  // minigame won
+                            goto_idle_state();
+                        }
                     }
                     else {
                         logger::warn("Struggle minigame finished, but no back-hug actor handle stored");
+                        goto_idle_state();
                     }
                 }
             }
+            else if (_state == state_t::InScene) {
+                if (sl_scenes::sl_scene::get_instance().get_error() || get_play_second() - _scene_start_play_second > _scene_timeout_play_seconds) {
+                    logger::debug("Scene failed or timed out, resetting state");
+                    sl_scenes::sl_scene::get_instance().revert();
+                    goto_idle_state();
+                    set_event_failure_min_delays();
+                }
+            }
+
         }
 
     }
@@ -284,7 +376,7 @@ namespace controller {
         if (outcome == 1.f) {
             logger::info("Dialogue ended with actor {}, starting struggle minigame", (void*)a_speaker);
             _state = state_t::Struggle;
-            _back_hug_actor_ref_handle = start_back_hug(a_speaker);
+            _back_hug_actor_handle = start_back_hug(a_speaker);
             minigame::struggle_game::get_instance().start(_struggle_timeout_seconds);
         }
     }
