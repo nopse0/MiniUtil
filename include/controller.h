@@ -8,7 +8,8 @@ namespace controller {
 		Idle,
 		ForceGreet,
 		Struggle,
-		InScene
+		InScene,
+		ForceGreet2
 	};
 
 
@@ -17,7 +18,7 @@ namespace controller {
 		// Configuration parameters (at the moment constants, so don't have to be persisted across game saves)
 		static inline constexpr int timer_ticks_per_hour() { return 36000; } // 36000 ticks per hour (10 ticks per second)
 		float _event_min_success_delay_game_days = 1.f / 48.f;  // 30 minutes
-		float _event_min_success_delay_play_seconds = 60.f;
+		float _event_min_success_delay_play_seconds = 120.f;
 		float _event_min_failure_delay_play_seconds = 20.f;   // some cooldown after a failed force greet attempt, to prevent race conditions
 		float _force_greet_timeout_play_seconds = 30.f;
 		int _struggle_timeout_seconds = 20;
@@ -33,6 +34,7 @@ namespace controller {
 		float _next_event_min_play_second = 0.f;
 		float _force_greet_start_play_second = 0.f;
 		RE::ActorHandle _force_greet_actor_handle;   // Careful, we changed the AI package of these actor
+		RE::ActorHandle _force_greet_actor_second_handle;
 
 		// Temporary state	
 		RE::ActorHandle _back_hug_actor_handle;

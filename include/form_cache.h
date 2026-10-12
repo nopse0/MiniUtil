@@ -5,5 +5,7 @@ namespace form_cache {
     inline RE::TESGlobal* MiniMolestForceGreetType = nullptr;
     inline RE::TESPackage* MiniMolestForceGreetPackage = nullptr;
     inline RE::TESPackage* MiniMolestDoNothingPackage = nullptr;
+    inline RE::TESPackage* MiniMolestForceGreetWithOneFollower = nullptr;
+    inline RE::TESPackage* MiniMolestForceGreetFollowerPackage = nullptr;
     inline RE::TESObjectREFR* MiniMolestAnimMarker = nullptr;
 }

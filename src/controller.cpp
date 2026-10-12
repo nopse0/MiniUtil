@@ -5,6 +5,7 @@
 #include "controller.h"
 #include "sl_scenes.h"
 #include "random.h"
+#include "papyrus_utils.h"
 
 namespace controller {
 
@@ -283,7 +284,7 @@ namespace controller {
             if (result && males.size()) {
                 int n = scanner::nth_nearest(3, males);
                 if (n > 0) {
-                    _busy = true;
+                    /*_busy = true;
                     _state = state_t::ForceGreet;
                     _force_greet_start_play_second = get_play_second();
                     form_cache::MiniMolestForceGreetType->value = 1.f;
@@ -292,7 +293,36 @@ namespace controller {
                     _force_greet_actor_handle = actor->GetHandle();
                     actor_util::add_package_override(actor, form_cache::MiniMolestForceGreetPackage, 100, 1);
                     logger::info("Started ForceGreet package on actor {}", (void*)actor);
-                    actor->EvaluatePackage(true, false);
+                    actor->EvaluatePackage(true, false);*/
+
+                    if (n >= 2) {
+                        auto quest = papyrus_utils::lookup<RE::TESQuest>("MiniMolestQuest");
+                        if (!quest) {
+                            logger::error("Unable to find MiniMolestQuest");
+                        }
+                        else {
+                            RE::Actor* forceGreeter1 = males[0].second;
+                            RE::Actor* forceGreeter2 = males[1].second;
+                            // Aliases: 0 player, 1 ForceGreeter1, 2 ForceGreeter2, 3 ForceGreeter3
+                            bool result = papyrus_utils::force_to_alias(quest, 1, forceGreeter1) && papyrus_utils::force_to_alias(quest, 2, forceGreeter2);
+                            if (!result) {
+                                logger::error("Setting reference aliases failed");
+                            }
+                            else {
+                                _state = state_t::ForceGreet2;
+                                _force_greet_start_play_second = get_play_second();
+                                form_cache::MiniMolestForceGreetType->value = 1.f;
+                                form_cache::MiniMolestForceGreetOutcome->value = 1.f;
+                                _force_greet_actor_handle = forceGreeter1->GetHandle();
+                                _force_greet_actor_second_handle = forceGreeter2->GetHandle();
+                                actor_util::add_package_override(forceGreeter1, form_cache::MiniMolestForceGreetWithOneFollower, 100, 1);
+                                actor_util::add_package_override(forceGreeter2, form_cache::MiniMolestForceGreetFollowerPackage, 100, 1);
+                                forceGreeter2->EvaluatePackage(true, false);
+                                forceGreeter1->EvaluatePackage(true, false);
+                                logger::info("Started ForceGreet with two npcs");
+                            }
+                        }
+                    }
                 }
             }
         }

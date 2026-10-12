@@ -59,6 +59,7 @@ set(sources ${sources}
     src/sl_scenes.cpp
     src/papyrus_utils.cpp
     src/random.cpp
+    src/fsm.cpp
     src/snippets.cpp
 )
 

@@ -237,19 +237,24 @@ void InitializeForms() {
 	form_cache::MiniMolestForceGreetPackage = dataHandler->LookupForm<RE::TESPackage>(0x000036CC, modName);
 	form_cache::MiniMolestDoNothingPackage = dataHandler->LookupForm<RE::TESPackage>(0x0001CF49, modName);
 	form_cache::MiniMolestAnimMarker = dataHandler->LookupForm<RE::TESObjectREFR>(0x0001CF48, modName);
+	form_cache::MiniMolestForceGreetWithOneFollower = dataHandler->LookupForm<RE::TESPackage>(0x00054A62, modName);
+	form_cache::MiniMolestForceGreetFollowerPackage = dataHandler->LookupForm<RE::TESPackage>(0x00054A61, modName);
 
 	if (!form_cache::MiniMolestForceGreetOutcome
 		|| !form_cache::MiniMolestForceGreetType
 		|| !form_cache::MiniMolestForceGreetPackage
 		|| !form_cache::MiniMolestDoNothingPackage
-		|| !form_cache::MiniMolestAnimMarker) {
+		|| !form_cache::MiniMolestAnimMarker
+		|| !form_cache::MiniMolestForceGreetFollowerPackage
+		|| !form_cache::MiniMolestForceGreetWithOneFollower
+		)
+	{
 		logger::error("Failed to load some forms from {}!", modName);
 	}
 	else {
 		logger::info("Successfully loaded forms from {}.", modName);
 	}
 }
-
 
 void InitializeSerialization()
 {
