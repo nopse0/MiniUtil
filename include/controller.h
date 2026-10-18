@@ -1,7 +1,10 @@
 #pragma once
 
-#include <functional>
-#include <vector>
+#include "time_manager.h"
+#include "fsm.h"
+#include "events.h"
+
+#if 0
 
 namespace controller {
 	enum class state_t : uint8_t {
@@ -69,4 +72,52 @@ namespace controller {
 		void schedule_task_after_play_seconds(float a_delay, std::function<void()> a_fn);
 		void schedule_task_at_play_second(float a_execute_play_second, std::function<void()> a_fn);
 	};
+
+
+	class manager : public time_manager::sleep_timer< time_manager::event_delayer< time_manager::clock>>, public singleton<manager> {
+	private:
+		uint32_t _frames_per_timer_tick = 6;
+		//fsm::fsm_t _fsm;
+		//events::selector _event_selector;
+	public:
+		uint32_t next_timer_tick(float a_play_time_delta_seconds);
+
+	};
+
+}
+
+#endif
+
+namespace fsm { class fsm; }
+
+namespace controller {
+
+
+	class controller : public RE::BSTEventSink<SKSE::ModCallbackEvent>, public singleton<controller> {
+	public:
+		controller();
+
+		// SKSE Serialization
+		void revert();
+		void serialize(SKSE::SerializationInterface* a_serde);
+		uint32_t deserialize(SKSE::SerializationInterface* a_serde);
+
+		// Mod event callback
+		virtual RE::BSEventNotifyControl ProcessEvent(const SKSE::ModCallbackEvent* a_event, RE::BSTEventSource<SKSE::ModCallbackEvent>* a_eventSource);
+		
+		// Functions called from Papyrus scripts
+		void on_dialog_end(RE::Actor* a_speaker);
+
+		// Skyrim Update loop hook
+		uint32_t next_timer_tick(float a_play_time_delta_seconds);
+	
+	private:
+		fsm::fsm _fsm;
+		settings::settings _settings;
+		time_manager::clock _clock;
+		event_chain::manager _event_manager;
+		game::context _context;
+	
+	};
+
 }

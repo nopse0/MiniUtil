@@ -1,13 +1,35 @@
+#include "state_idle.h"
+#include "state_force_greet_1npc.h"
+#include "fsm.h"
+#include "controller.h"
+#include "spdlog/cfg/helpers.h"
 #include "minigame.h"
 #include "form_cache.h"
 #include "actor_util.h"
-#include "controller.h"
 #include "sl_scenes.h"
 #include "random.h"
+#include "events.h"
+#include "spdlog/sinks/sink.h"
 
 namespace main_loop {
 	void install();
 }
+
+void LoggingTest(std::string a_logger_name) {
+	auto logger = spdlog::get(a_logger_name);
+	if (!logger) {
+		auto def_logger = spdlog::default_logger();
+		if (def_logger) {
+			logger = std::make_shared<spdlog::logger>(a_logger_name,
+				def_logger->sinks().begin(),
+				def_logger->sinks().end());
+			/*logger->set_formatter(std::make_unique<spdlog::pattern_formatter>("[%T.%f] [%=5t] [%n] [%L] [%s:%# %!] %v"));*/
+			spdlog::initialize_logger(logger);
+			//spdlog::register_logger(logger);
+		}
+	}
+}
+
 
 #if 0
 namespace scanner {
@@ -208,21 +230,38 @@ bool RegisterPapyrusFunctions(RE::BSScript::IVirtualMachine* vm)
 }
 
 // ImGui
-void __stdcall render() {
+void __stdcall render_minigame() {
 	minigame::struggle_game::get_instance().render();
 }
 
-bool __stdcall on_input(RE::InputEvent* a_event) {
+bool __stdcall on_input_minigame(RE::InputEvent* a_event) {
 	return minigame::struggle_game::get_instance().on_input(a_event);
 }
+
+#if 0
+void __stdcall render_ui() {
+	auto& s = events::manager::get_instance();
+	if (s.ui_is_loading())
+		return;
+
+
+	static events::settings _settings;
+	if (ImGuiMCP::InputDouble("base_chance", &_settings.base_chance_global)) {
+		
+	}
+}
+#endif
 
 void InitializeMCP() {
 	if (!SKSEMenuFramework::IsInstalled()) {
 		return;
 	}
 
-	SKSEMenuFramework::AddHudElement(render);
-	SKSEMenuFramework::AddInputEvent(on_input);
+	SKSEMenuFramework::AddHudElement(render_minigame);
+	SKSEMenuFramework::AddInputEvent(on_input_minigame);
+
+	//SKSEMenuFramework::SetSection("MiniMolest");
+	//SKSEMenuFramework::AddSectionItem("MiniMolest", render_ui);
 }
 
 // Skyrim Forms (to be exceuted after data loaded)
@@ -297,6 +336,16 @@ void InitializeSerialization()
 	});
 
 	serialization->SetLoadCallback([](SKSE::SerializationInterface* a_serde) {
+		
+		
+		//std::thread t1
+		//{
+		//	[] {
+		//		LoggingTest("custom");
+		//	}
+		//};
+		//t1.join();
+		
 		std::uint32_t type;
 		std::uint32_t version;
 		std::uint32_t length;
@@ -387,26 +436,82 @@ void OnSKSEMessage(SKSE::MessagingInterface::Message* a_msg)
 	}
 }
 
+//namespace logger_custom {
+//	MINIUTILS_MAKE_CUSTOM_LOGGER(trace, "custom", spdlog::level::trace);
+//}
 
 // Der SKSE Einstiegspunkt
 extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface* a_skse) {
 	SKSE::Init(a_skse);
 
-	// 1. ALLOCATE THE TRAMPOLINE BLOCK HERE FIRST!
-	//SKSE::AllocTrampoline(64);
+	//===========================================================================
 
 	const char* const ini_name = "data/skse/plugins/MiniUtil.ini";
 	CSimpleIniA ini;
 	SI_Error err = ini.LoadFile(ini_name);
-	spdlog::level::level_enum level = spdlog::level::info;
-	if (!err) {
-		level = static_cast<spdlog::level::level_enum>(ini.GetLongValue("Config", "LogLevel", level));
-		//ExecuteScan_ScriptName = std::string(ini.GetValue("Config", "ScriptName", ExecuteScan_ScriptName.c_str()));
+
+	spdlog::level::level_enum global_level = spdlog::level::info;
+	std::string cfg_string = "";
+
+	if (err == SI_OK) {
+		const char* global_level_str = ini.GetValue("Config", "LogLevel", "info");
+		logger::info("global_level_str = {}", global_level_str);
+		cfg_string = global_level_str;
+
+		const char* default_pattern = "[%T.%f] [%=5t] [%n] [%L] %v";
+		const char* custom_pattern = ini.GetValue("Config", "LogPatternFormat", default_pattern);
+
+		//if (auto def_logger = spdlog::default_logger()) {
+		//	for (auto& sink : def_logger->sinks()) {
+		//		sink->set_pattern(custom_pattern);
+		//	}
+		//}
+		spdlog::set_pattern(custom_pattern);
+
+		// 2. Alle Custom-Logger aus der Sektion [LogLevels] auslesen
+		CSimpleIniA::TNamesDepend keys;
+		if (ini.GetAllKeys("LogLevels", keys)) {
+			for (const auto& key : keys) {
+				const char* custom_level = ini.GetValue("LogLevels", key.pItem, "info");
+				// Format anfügen: ,logger_name=level
+				cfg_string += std::format(",{}={}", key.pItem, custom_level);
+			}
+		}
 	}
 	else {
 		logger::info("Could not read config file {}", ini_name);
+		cfg_string = "info"; // Fallback
+
+		// Fallback-Pattern für den Fehlerfall
+		if (auto def_logger = spdlog::default_logger()) {
+			for (auto& sink : def_logger->sinks()) {
+				sink->set_pattern("[%T.%f] [%n] [%L] %v");
+			}
+		}
 	}
-	spdlog::set_level(level);
+
+	// 3. Magierunde: spdlog konfigurieren!
+	// Übergibt z.B.: "info,event_chain=debug,network=err"
+	logger::info("cfg_string = {}", cfg_string);
+	spdlog::cfg::helpers::load_levels(cfg_string);
+
+
+
+	/*LoggingTest("custom");
+	//logger_test::debug("Custom logger test #1");
+
+	auto logger = spdlog::get("custom");
+	if (logger) {
+		logger::info("custom logger is defined");
+		//logger->set_level(spdlog::level::trace);
+		//logger->set_formatter(std::make_unique<spdlog::pattern_formatter>("[%T.%f] [%=5t] [%n] [%L] [%s:%# %!] %v"));
+	}
+	else
+		logger::info("custom logger is undefined");
+	
+	logger->debug("Custom logger test #2");*/
+
+	//===============================================================================
 
 	auto* messaging = SKSE::GetMessagingInterface();
 	if (messaging) {
@@ -422,3 +527,6 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
 
 	return true;
 }
+
+
+

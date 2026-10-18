@@ -1,12 +1,17 @@
+#include "state_idle.h"
+#include "state_force_greet_1npc.h"
+#include "fsm.h"
+#include "controller.h"
 #include "minigame.h"
 #include "scanner.h"
 #include "actor_util.h"
 #include "form_cache.h"
-#include "controller.h"
 #include "sl_scenes.h"
 #include "random.h"
 #include "papyrus_utils.h"
+#include "skyrim_util.h"
 
+#if 0
 namespace controller {
 
     // Eigene Definition, da die original-Methode private ist
@@ -564,4 +569,67 @@ namespace controller {
 
         logger::info("stop_back_hug: restored actor {} and re-enabled player controls", (void*)a_actor);
     }
+
+
+    uint32_t manager::next_timer_tick(float a_play_time_delta_seconds)
+    {
+        update_play_second(a_play_time_delta_seconds);   // advance the clock
+
+        if (run_scheduled_tasks())
+            return 1;    // scheduled tasks not done yet, don't interfer
+    
+        //fsm::context_t ctx{ *this, _event_selector };
+        //_fsm.handle_event(fsm::event_timer_tick{ctx});
+    
+        return 6;
+    }
+
+
+
+}
+
+#endif
+
+namespace controller {
+    controller::controller() : _context{_settings, _clock, _event_manager} {
+        _event_manager.initialize(_context);
+    }
+
+
+    // SKSE Serialization
+    void controller::revert() {
+
+    }
+    void controller::serialize(SKSE::SerializationInterface* a_serde) {
+
+    }
+    uint32_t controller::deserialize(SKSE::SerializationInterface* a_serde) {
+        return 0;
+    }
+
+    // Mod event callback
+    RE::BSEventNotifyControl controller::ProcessEvent(const SKSE::ModCallbackEvent* a_event, RE::BSTEventSource<SKSE::ModCallbackEvent>* a_eventSource) {
+        return RE::BSEventNotifyControl::kContinue;
+    }
+
+    // Functions called from Papyrus scripts
+    void controller::on_dialog_end(RE::Actor* a_speaker) {
+        _fsm.process_dialog_finished(_context, a_speaker);
+    }
+
+    // Skyrim Update loop hook
+    uint32_t controller::next_timer_tick(float a_play_time_delta_seconds) {
+
+        // advance time first (so scheduling uses same time base as Papyrus Wait)
+        _clock.update_play_second(a_play_time_delta_seconds);
+
+        if (!skyrim_util::is_playing()) {
+            logger::trace("on_timer_tick aborted, not playing");
+            return 1;
+        }
+
+        _fsm.process_timer_tick(_context);
+        return 6;  // next tick in 6 frames
+    }
+
 }

@@ -1,3 +1,6 @@
+#include "state_idle.h"
+#include "state_force_greet_1npc.h"
+#include "fsm.h"
 #include "controller.h"
 
 namespace main_loop {
@@ -6,8 +9,8 @@ namespace main_loop {
     {
     public:
         static constexpr int _frame_rate = 60;
-		static constexpr int _tick_interval_in_frames = _frame_rate * 3600 / controller::controller::timer_ticks_per_hour(); // 1 frame = 1/60th of a second (approx.)
-        //static constexpr int _tick_interval_in_frames = 1;
+		//static constexpr int _tick_interval_in_frames = _frame_rate * 3600 / controller::controller::timer_ticks_per_hour(); // 1 frame = 1/60th of a second (approx.)
+        static constexpr int _tick_interval_in_frames = 1;
 
         static void hook()
         {
@@ -41,12 +44,13 @@ namespace main_loop {
             _accumulated_play_time += tim->realTimeDelta;
             
             // 2. Safely execute your plugin logic AFTER the frame has processed
-            static int frame_count = 0;
+            static uint32_t frame_count = 0;
+            static uint32_t next_tick_count = 0;
 			frame_count++;
-            if (frame_count == _tick_interval_in_frames) {
+            if (frame_count >= next_tick_count) {
 				frame_count = 0;
                 logger::trace("hook_update_func: emitting timer tick");
-				controller::controller::get_instance().on_timer_tick(_accumulated_play_time);
+				next_tick_count = controller::controller::get_instance().next_timer_tick(_accumulated_play_time);
 				_accumulated_play_time = 0.f;
             }
         }

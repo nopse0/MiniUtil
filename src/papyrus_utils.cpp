@@ -5,7 +5,7 @@ namespace papyrus_utils {
 	{
 		RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo> actorTypeInfoPtr;
 		if (!vm->GetScriptObjectType("Actor", actorTypeInfoPtr) || !actorTypeInfoPtr) {
-			logger::error("Konnte ObjectTypeInfo für 'Actor' nicht finden!");
+			logger::error("Konnte ObjectTypeInfo fÃ¼r 'Actor' nicht finden!");
 			return false;
 		}
 
