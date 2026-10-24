@@ -62,10 +62,11 @@ set(sources ${sources}
     src/fsm.cpp
     src/events.cpp
     src/state_idle.cpp
-    src/state_force_greet_1npc.cpp
+    src/state_wait_timeout.cpp
     src/forced_scene_1npc.cpp
     src/skyrim_util.cpp
-    #src/scheduler.cpp
+    src/backhug.cpp
+    src/state_serve_scene_parameters.cpp
     src/fsm_snippet.cpp
     src/snippets.cpp
 )

@@ -4,7 +4,7 @@
 #include "game_context.h"
 
 //#include "state_idle.h"
-//#include "state_force_greet_1npc.h"
+//#include "state_callback.h"
 
 namespace fsm {
 
@@ -79,16 +79,16 @@ namespace fsm {
 #endif
 	class fsm;
 
-	//using fsm_state = std::variant<state_idle, state_force_greet_1npc>;   //, state_sleep, state_force_greet_one, state_force_greet_two>;
-
 	template <typename T>
 	concept IsValidState = requires(T s, fsm& a_fsm, game::context& a_ctx, RE::Actor* a_speaker) {
 		{ s.handle_tick(a_fsm, a_ctx) }   -> std::same_as<std::optional<fsm_state>>;
 		{ s.handle_dialog_finished(a_fsm, a_ctx, a_speaker) } -> std::same_as<std::optional<fsm_state>>;
 	};
 
+
+
 	//static_assert(IsValidState<state_idle>);
-	//static_assert(IsValidState<state_force_greet_1npc>);
+	//static_assert(IsValidState<state_callback>);
 
 	//struct state_sleep;
 	//struct state_force_greet_two;
@@ -101,35 +101,21 @@ namespace fsm {
 		fsm();
 
 		// T is the specific state type you want to change to
-		template <typename T, typename... Args>
-		void emplace_state(Args&&... args) {
-			// Construct the state directly inside the variant buffer
-			_current_state.emplace<T>(std::forward<Args>(args)...);
-		}
-
-		//void set_current_state(fsm_state&& a_state);
+		//template <typename T, typename... Args>
+		//void emplace_state(Args&&... args) {
+		//	// Construct the state directly inside the variant buffer
+		//	_current_state.emplace<T>(std::forward<Args>(args)...);
+		//}
 
 		void process_timer_tick(game::context& a_ctx);
 		void process_dialog_finished(game::context& a_ctx, RE::Actor* a_speaker);
+		void process_mod_event(game::context& a_ctx, RE::BSFixedString a_event_name);
+
+		bool process_get_scene_parameters(game::context& a_ctx, RE::TESQuest* a_this, float a_handle);
+		bool process_set_scene_thread_id(game::context& a_ctx, float a_handle, uint32_t a_thread_id);
+		bool process_set_scene_error(game::context& a_ctx, float a_handle);
 	};
 
-
-	/*struct state_force_greet_one {
-		float _timeout_play = 0.f;
-		RE::ActorHandle _actor_handle;
-		std::function<void(fsm&, RE::Actor* a_speaker)> on_dialog_finished;
-		std::function<void(fsm&)> on_timeout;
-	};
-
-	struct state_force_greet_two {
-		float _timeout_play = 0.f;
-		RE::ActorHandle _actor_handle_one;
-		RE::ActorHandle _actor_handle_two;
-		std::function<void(fsm&, RE::Actor* a_speaker)> on_dialog_finished;
-		std::function<void(fsm&)> on_timeout;
-	};*/
-
-	//static_assert(IsValidState<state_force_greet_one>);
 
 
 }

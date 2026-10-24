@@ -8,4 +8,8 @@ namespace form_cache {
     inline RE::TESPackage* MiniMolestForceGreetWithOneFollower = nullptr;
     inline RE::TESPackage* MiniMolestForceGreetFollowerPackage = nullptr;
     inline RE::TESObjectREFR* MiniMolestAnimMarker = nullptr;
+
+    // SexLab
+    inline RE::TESFaction* SexLabAnimatingFaction = nullptr;
+    inline RE::TESFaction* SexLabPlayerSexFaction = nullptr;
 }

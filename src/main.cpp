@@ -1,5 +1,6 @@
 #include "state_idle.h"
-#include "state_force_greet_1npc.h"
+#include "state_wait_timeout.h"
+#include "state_serve_scene_parameters.h"
 #include "fsm.h"
 #include "controller.h"
 #include "spdlog/cfg/helpers.h"
@@ -15,19 +16,19 @@ namespace main_loop {
 	void install();
 }
 
-void LoggingTest(std::string a_logger_name) {
-	auto logger = spdlog::get(a_logger_name);
+void LoggingTest() {
+	/*auto logger = spdlog::get(a_logger_name);
 	if (!logger) {
 		auto def_logger = spdlog::default_logger();
 		if (def_logger) {
 			logger = std::make_shared<spdlog::logger>(a_logger_name,
 				def_logger->sinks().begin(),
 				def_logger->sinks().end());
-			/*logger->set_formatter(std::make_unique<spdlog::pattern_formatter>("[%T.%f] [%=5t] [%n] [%L] [%s:%# %!] %v"));*/
 			spdlog::initialize_logger(logger);
 			//spdlog::register_logger(logger);
 		}
-	}
+	}*/
+	event_chain::logger_custom::debug("event_chain::logger_custom");
 }
 
 
@@ -199,22 +200,30 @@ void MinigameTestCpp(RE::TESQuest* thisInstance, int duration_secs)
 
 void MiniUtil_OnDialogEnd(RE::StaticFunctionTag*, RE::Actor* akSpeaker)
 {
+	if (ModDisabled)
+		return;
 	controller::controller::get_instance().on_dialog_end(akSpeaker);
 }
 
 bool MiniMolest_GetSceneParameters(RE::TESQuest* thisInstance, float handle)
 {
-	return sl_scenes::sl_scene::get_instance().get_scene_parameters(thisInstance, handle);
+	if (ModDisabled)
+		return false;
+	return controller::controller::get_instance().on_get_scene_parameters(thisInstance, handle);
 }
 
 bool MiniUtil_SetSceneThreadID(RE::StaticFunctionTag*, float handle, uint32_t threadId)
 {
-	return sl_scenes::sl_scene::get_instance().set_thread_id(handle, threadId);
+	if (ModDisabled)
+		return false;
+	return controller::controller::get_instance().on_set_scene_thread_id(handle, threadId);
 }
 
 bool MiniUtil_SetSceneError(RE::StaticFunctionTag*, float handle)
 {
-	return sl_scenes::sl_scene::get_instance().set_error(handle);
+	if (ModDisabled)
+		return false;
+	return controller::controller::get_instance().on_set_scene_error(handle);
 }
 
 bool RegisterPapyrusFunctions(RE::BSScript::IVirtualMachine* vm)
@@ -288,11 +297,16 @@ void InitializeForms() {
 		|| !form_cache::MiniMolestForceGreetWithOneFollower
 		)
 	{
-		logger::error("Failed to load some forms from {}!", modName);
+		logger::critical("Failed to load some forms from {}!", modName);
+		ModDisabled = true;
 	}
 	else {
 		logger::info("Successfully loaded forms from {}.", modName);
 	}
+
+	const char* sexLab = "SexLab.esm";
+	form_cache::SexLabAnimatingFaction = dataHandler->LookupForm<RE::TESFaction>(0x0000E50F, sexLab);
+	form_cache::SexLabPlayerSexFaction = dataHandler->LookupForm<RE::TESFaction>(0x0004E12F, sexLab);
 }
 
 void InitializeSerialization()
@@ -313,6 +327,8 @@ void InitializeSerialization()
 	serialization->SetUniqueID('MMST');
 
 	serialization->SetRevertCallback([](SKSE::SerializationInterface*) {
+		if (ModDisabled)
+			return;
 		logger::debug("SKSE::RevertCallback");
 		random::random::get_instance().reset();
 		// sl_scenes::sl_scene::get_instance().revert();  // managed by controller
@@ -320,6 +336,8 @@ void InitializeSerialization()
 	});
 
 	serialization->SetSaveCallback([](SKSE::SerializationInterface* a_serde) {
+		if (ModDisabled)
+			return;
 		logger::debug("SKSE::SaveCallback");
 		if (!a_serde->OpenRecord('MMST', 1)) {
 			logger::error("Konnte Haupt-Record nicht öffnen!");
@@ -336,16 +354,21 @@ void InitializeSerialization()
 	});
 
 	serialization->SetLoadCallback([](SKSE::SerializationInterface* a_serde) {
-		
-		
+		if (ModDisabled)
+			return;
+
+		// assertion test
+		//release_assert(a_serde == nullptr);
+
 		//std::thread t1
 		//{
 		//	[] {
-		//		LoggingTest("custom");
+		//      // Breakpoint here, to examine spdlog initialization
+		//		LoggingTest();
 		//	}
 		//};
 		//t1.join();
-		
+	
 		std::uint32_t type;
 		std::uint32_t version;
 		std::uint32_t length;
@@ -404,6 +427,8 @@ void InitializeSerialization()
 }
 
 void RegisterForModEvents() {
+	if (ModDisabled)
+		return;
 	auto eventSource = SKSE::GetModCallbackEventSource();
 	if (eventSource) {
 		// Wir fügen unseren Callback hinzu.
@@ -418,27 +443,23 @@ void RegisterForModEvents() {
 void OnSKSEMessage(SKSE::MessagingInterface::Message* a_msg)
 {
 	switch (a_msg->type) {
-	case SKSE::MessagingInterface::kNewGame:
-		random::random::get_instance().new_game();
-		RegisterForModEvents();
-		break;
-
-	case SKSE::MessagingInterface::kPostLoad:
+	case SKSE::MessagingInterface::kPostLoad:   // after plugin (.dll) has been loaded
 		InitializeSerialization();
 		RegisterForModEvents();
 		break;
 
-	case SKSE::MessagingInterface::kDataLoaded:
+	case SKSE::MessagingInterface::kDataLoaded: // after all esm/esp/etc. have been loaded
 		InitializeForms();
 		main_loop::install();
 		actor_util::internal::initialize();
 		break;
+
+	case SKSE::MessagingInterface::kNewGame:
+		random::random::get_instance().new_game();
+		RegisterForModEvents();
+		break;
 	}
 }
-
-//namespace logger_custom {
-//	MINIUTILS_MAKE_CUSTOM_LOGGER(trace, "custom", spdlog::level::trace);
-//}
 
 // Der SKSE Einstiegspunkt
 extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface* a_skse) {
@@ -449,6 +470,9 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
 	const char* const ini_name = "data/skse/plugins/MiniUtil.ini";
 	CSimpleIniA ini;
 	SI_Error err = ini.LoadFile(ini_name);
+
+	event_chain::logger_custom::init_logger();
+	fsm::logger_custom::init_logger();
 
 	spdlog::level::level_enum global_level = spdlog::level::info;
 	std::string cfg_string = "";
@@ -495,7 +519,11 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
 	logger::info("cfg_string = {}", cfg_string);
 	spdlog::cfg::helpers::load_levels(cfg_string);
 
-
+	event_chain::logger_custom::debug("event_chain::logger_custom");
+	fsm::logger_custom::debug("fsm::logger_custom");
+	animation::logger_custom::debug("animation::logger_custom");
+	controller::logger_custom::debug("controller::logger_custom");
+	scanner::logger_custom::debug("scanner::logger_custom");
 
 	/*LoggingTest("custom");
 	//logger_test::debug("Custom logger test #1");

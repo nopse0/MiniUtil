@@ -1,5 +1,6 @@
 #include "state_idle.h"
-#include "state_force_greet_1npc.h"
+#include "state_wait_timeout.h"
+#include "state_serve_scene_parameters.h"
 #include "fsm.h"
 #include "controller.h"
 #include "minigame.h"
@@ -295,7 +296,7 @@ namespace controller {
                     form_cache::MiniMolestForceGreetType->value = 1.f;
                     form_cache::MiniMolestForceGreetOutcome->value = 1.f;
                     RE::Actor* actor = males[0].second;
-                    _force_greet_actor_handle = actor->GetHandle();
+                    _npc1_handle = actor->GetHandle();
                     actor_util::add_package_override(actor, form_cache::MiniMolestForceGreetPackage, 100, 1);
                     logger::info("Started ForceGreet package on actor {}", (void*)actor);
                     actor->EvaluatePackage(true, false);*/
@@ -591,7 +592,7 @@ namespace controller {
 #endif
 
 namespace controller {
-    controller::controller() : _context{_settings, _clock, _event_manager} {
+    controller::controller() : _context{_settings, _clock, _event_manager, minigame::struggle_game::get_instance(), _scene_starter, random::random::get_instance()} {
         _event_manager.initialize(_context);
     }
 
@@ -609,6 +610,10 @@ namespace controller {
 
     // Mod event callback
     RE::BSEventNotifyControl controller::ProcessEvent(const SKSE::ModCallbackEvent* a_event, RE::BSTEventSource<SKSE::ModCallbackEvent>* a_eventSource) {
+        if (a_event) {
+            logger::trace("controller::ProcessEvent: eventName = {}", a_event->eventName.c_str());
+            _fsm.process_mod_event(_context, a_event->eventName);
+        }
         return RE::BSEventNotifyControl::kContinue;
     }
 
@@ -617,14 +622,27 @@ namespace controller {
         _fsm.process_dialog_finished(_context, a_speaker);
     }
 
+    bool controller::on_get_scene_parameters(RE::TESQuest* a_this, float a_handle) {
+        return _fsm.process_get_scene_parameters(_context, a_this, a_handle);
+    }
+
+    bool controller::on_set_scene_thread_id(float a_handle, uint32_t a_thread_id) {
+        return _fsm.process_set_scene_thread_id(_context, a_handle, a_thread_id);
+    }
+
+    bool controller::on_set_scene_error(float a_handle) {
+        return _fsm.process_set_scene_error(_context, a_handle);
+    }
+
     // Skyrim Update loop hook
     uint32_t controller::next_timer_tick(float a_play_time_delta_seconds) {
 
         // advance time first (so scheduling uses same time base as Papyrus Wait)
         _clock.update_play_second(a_play_time_delta_seconds);
+        logger_custom::trace("controller::next_timer_tick current play time = {}", _clock.get_play_second());
 
         if (!skyrim_util::is_playing()) {
-            logger::trace("on_timer_tick aborted, not playing");
+            logger_custom::trace("controller::next_timer_tick aborted, not playing");
             return 1;
         }
 

@@ -1,6 +1,6 @@
 set root="C:\Build\MiniUtil\MiniUtil"
 set dest="D:\Games\Skyrim-1.6.1170-shattered"
-set pluginsrc=%root%\build\release-msvc
+set pluginsrc=%root%\build\debug-msvc
 set plugindest=%dest%\overwrite
 set inisrc=%root%\config
 copy %pluginsrc%\*.dll %plugindest%\SKSE\Plugins\

@@ -16,7 +16,7 @@ namespace actor_util {
                             char* stdFunctionAddr = nativeFnAddr + 0x50;
                             std::uintptr_t rawFunctionAddress = *reinterpret_cast<std::uintptr_t*>(stdFunctionAddr);
                             if (rawFunctionAddress > 0x00010000) { // Einfacher Validitätscheck für Adressen
-                                logger::debug("Found ActorUtil.AddPackageOverride at: {:X}", rawFunctionAddress);
+                                logger::info("Found ActorUtil.AddPackageOverride at: {:X}", rawFunctionAddress);
                                 add_package_override = reinterpret_cast<add_package_override_t>(rawFunctionAddress);
                             }
                             else {
@@ -28,7 +28,7 @@ namespace actor_util {
                             char* stdFunctionAddr = nativeFnAddr + 0x50;
                             std::uintptr_t rawFunctionAddress = *reinterpret_cast<std::uintptr_t*>(stdFunctionAddr);
                             if (rawFunctionAddress > 0x00010000) { // Einfacher Validitätscheck für Adressen
-                                logger::debug("Found ActorUtil.RemovePackageOverride at: {:X}", rawFunctionAddress);
+                                logger::info("Found ActorUtil.RemovePackageOverride at: {:X}", rawFunctionAddress);
                                 remove_package_override = reinterpret_cast<remove_package_override_t>(rawFunctionAddress);
                             }
                             else {
@@ -40,7 +40,7 @@ namespace actor_util {
                             char* stdFunctionAddr = nativeFnAddr + 0x50;
                             std::uintptr_t rawFunctionAddress = *reinterpret_cast<std::uintptr_t*>(stdFunctionAddr);
                             if (rawFunctionAddress > 0x00010000) { // Einfacher Validitätscheck für Adressen
-                                logger::debug("Found ActorUtil.CountPackageOverride at: {:X}", rawFunctionAddress);
+                                logger::info("Found ActorUtil.CountPackageOverride at: {:X}", rawFunctionAddress);
                                 count_package_override = reinterpret_cast<count_package_override_t>(rawFunctionAddress);
                             }
                             else {

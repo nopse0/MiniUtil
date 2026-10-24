@@ -3,7 +3,8 @@
 //#include "fsm.h"
 #include "events.h"
 #include "state_idle.h"
-#include "state_force_greet_1npc.h"
+#include "state_wait_timeout.h"
+#include "state_serve_scene_parameters.h"
 
 #if 0
 namespace events {
@@ -192,19 +193,33 @@ namespace event_chain {
 		_events.push_back(std::move(fs));
 	}
 
-	std::optional<fsm::fsm_state> manager::trigger(fsm::fsm& fsm, game::context& ctx) {
+	float manager::get_next_trigger_time() {
+		auto it = std::min_element(_events.begin(), _events.end(), event_less);
+		if (it != _events.end()) {
+			return std::visit([](const auto& ev) { return ev.get_next_p(); }, *it);
+		}
+		else
+			return NAN;
+	}
+
+	std::optional<fsm::fsm_state> manager::trigger(game::context& ctx) {
 		auto it = std::min_element(_events.begin(), _events.end(), event_less);
 		if (it == _events.end())
 			return std::nullopt;
 		auto next_p = std::visit([](const auto& ev) { return ev.get_next_p(); }, *it);
 		if (next_p > ctx._clock.get_play_second())
 			return std::nullopt;
-		bool triggered = std::visit([&ctx](auto& ev) -> bool { return ev.pre_trigger(ctx); }, *it);
+		bool triggered = std::visit([&ctx](auto& ev) -> bool { return ev.trigger_phase1(ctx); }, *it);
 		if (!triggered) {
-			std::visit([&ctx](auto& ev) -> void { ev.update_cooldown(ctx); }, *it);
+			std::visit([&ctx](auto& ev) -> void { ev.update_cooldown(ctx, false); }, *it);
+			logger_custom::debug("manager::trigger !triggered, next trigger check at play time second {}", get_next_trigger_time()); // clumsy to log this, but useful for debugging
 			return std::nullopt;
 		}
-		return  std::visit([&fsm, &ctx](auto& ev) -> std::optional<fsm::fsm_state> { return ev.trigger(fsm, ctx); }, *it);
+		else {
+			auto result = std::visit([&ctx](auto& ev) -> std::optional<fsm::fsm_state> { return ev.trigger_phase2(ctx); }, *it);
+			logger_custom::debug("manager::trigger triggered at play time second {}, scheduled time was {}", ctx._clock.get_play_second(), get_next_trigger_time());
+			return result;
+		}
 	}
 
 

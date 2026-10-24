@@ -170,11 +170,11 @@ namespace fsm { class fsm; }
 namespace event_chain {
 
 	template <typename T>
-	concept IsValidEventChain = requires(T ec, game::context& ctx) {
-		{ ec.pre_trigger(ctx) } -> std::same_as<bool>;
+	concept IsValidEventChain = requires(T ec, game::context& ctx, bool triggered) {
+		{ ec.trigger_phase1(ctx) } -> std::same_as<bool>;
 		{ ec.get_next_p() } -> std::same_as<float>;
 		{ ec.get_next_g() } -> std::same_as<float>;
-		{ ec.update_cooldown(ctx) } -> std::same_as<void>;
+		{ ec.update_cooldown(ctx, triggered) } -> std::same_as<void>;
 	};
 
 	using event_variant = std::variant<forced_scene_1npc>;
@@ -187,7 +187,10 @@ namespace event_chain {
 	
 	public:
 		void initialize(game::context& ctx);
-		std::optional<fsm::fsm_state> trigger(fsm::fsm& fsm, game::context& ctx);
+		std::optional<fsm::fsm_state> trigger(game::context& ctx);
+
+	private:
+		float get_next_trigger_time();
 	};
 
 }

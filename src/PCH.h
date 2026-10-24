@@ -8,8 +8,8 @@
 
 using namespace std::string_view_literals;
 
-//using namespace std;
-
+// Set on fatal errors, e.g. if I can't load my Forms from the .esp
+inline bool ModDisabled = false;
 
 #define MINIUTILS_MAKE_DEFAULT_LOGGER(a_func, a_level_val)                                              \
                                                                                       \
@@ -48,8 +48,10 @@ namespace logger
 	MINIUTILS_MAKE_DEFAULT_LOGGER(debug, spdlog::level::debug);
 	MINIUTILS_MAKE_DEFAULT_LOGGER(trace, spdlog::level::trace);
 	MINIUTILS_MAKE_DEFAULT_LOGGER(warn, spdlog::level::warn);
+	MINIUTILS_MAKE_DEFAULT_LOGGER(critical, spdlog::level::critical);
 
 }
+
 
 #define MINIUTILS_MAKE_CUSTOM_LOGGER(a_func, a_logger_name, a_level_val)              \
                                                                                       \
@@ -64,18 +66,6 @@ namespace logger
 			std::source_location a_loc = std::source_location::current())             \
 		{                                                                             \
 			auto logger = spdlog::get(a_logger_name);                                 \
-			if (!logger) {                                                            \
-				auto def_logger = spdlog::default_logger();                           \
-				if (def_logger) {													  \
-					logger = std::make_shared<spdlog::logger> (                       \
-						a_logger_name,                                                \
-						def_logger->sinks().begin(),                                  \
-						def_logger->sinks().end());									  \
-					/*logger->set_formatter(std::make_unique<spdlog::pattern_formatter>("[%T.%f] [%=5t] [%n] [%L] [%s:%# %!] %v"));*/\
-					spdlog::initialize_logger(logger);                                \
-					/*spdlog::register_logger(logger);*/                              \
-				}                                                                     \
-			}                                                                         \
 			if (logger && logger->should_log(a_level_val)) {                          \
 				logger->log(                                                          \
 					spdlog::source_loc{                                               \
@@ -93,28 +83,121 @@ namespace logger
 	a_func(fmt::format_string<Args...>, Args&&...) -> a_func<Args...>;
 
 
+//spdl->log(a_level_val, "logger({}) initialized", a_logger_name);  \
+//logger::info("logger({}) level = {}", a_logger_name, (uint32_t)spdl->level()); \
+//logger = spdl;
+
+#define MINIUTILS_INIT_CUSTOM_LOGGER(a_logger_name)\
+inline void init_logger() {\
+	auto logger = spdlog::get(a_logger_name);\
+	if (!logger) {\
+		auto def_logger = spdlog::default_logger();                           \
+		if (def_logger) {													  \
+			logger = std::make_shared<spdlog::logger> (                       \
+				a_logger_name,                                                \
+				def_logger->sinks().begin(),                                  \
+				def_logger->sinks().end());									  \
+				spdlog::initialize_logger(logger); 							  \
+				logger->flush_on(spdlog::level::debug);		                  \
+		}\
+	}\
+}
+
+#define MINIUTILS_CUSTOM_LOGGER_SHOULD_LOG(a_logger_name)\
+inline bool should_log(spdlog::level::level_enum a_level_val) {\
+	auto logger = spdlog::get(a_logger_name);\
+	if (!logger) return false;\
+	return logger->should_log(a_level_val);\
+}
+
 namespace event_chain {
 	namespace logger_custom {
+		MINIUTILS_INIT_CUSTOM_LOGGER("event_chain")
 		MINIUTILS_MAKE_CUSTOM_LOGGER(error, "event_chain", spdlog::level::err);
 		MINIUTILS_MAKE_CUSTOM_LOGGER(debug, "event_chain", spdlog::level::debug);
+		MINIUTILS_CUSTOM_LOGGER_SHOULD_LOG("event_chain")
 	}
 }
 
 namespace fsm {
 	namespace logger_custom {
+		MINIUTILS_INIT_CUSTOM_LOGGER("fsm")
 		MINIUTILS_MAKE_CUSTOM_LOGGER(trace, "fsm", spdlog::level::trace);
 		MINIUTILS_MAKE_CUSTOM_LOGGER(debug, "fsm", spdlog::level::debug);
+		MINIUTILS_CUSTOM_LOGGER_SHOULD_LOG("fsm");
 	}
 }
 
-namespace logger_test {
-	//MINIUTILS_MAKE_CUSTOM_LOGGER(error, "custom", spdlog::level::err);
-	//MINIUTILS_MAKE_CUSTOM_LOGGER(debug, "custom", spdlog::level::debug);
+namespace animation {
+	namespace logger_custom {
+		MINIUTILS_INIT_CUSTOM_LOGGER("animation")
+		MINIUTILS_MAKE_CUSTOM_LOGGER(debug, "animation", spdlog::level::debug);
+		MINIUTILS_MAKE_CUSTOM_LOGGER(trace, "animation", spdlog::level::trace);
+	}
 }
 
-namespace util {
+namespace controller {
+	namespace logger_custom {
+		MINIUTILS_INIT_CUSTOM_LOGGER("controller")
+		MINIUTILS_MAKE_CUSTOM_LOGGER(debug, "controller", spdlog::level::debug);
+		MINIUTILS_MAKE_CUSTOM_LOGGER(trace, "controller", spdlog::level::trace);
+	}
+}
+
+namespace scanner {
+	namespace logger_custom {
+		MINIUTILS_INIT_CUSTOM_LOGGER("scanner")
+		MINIUTILS_MAKE_CUSTOM_LOGGER(debug, "scanner", spdlog::level::debug);
+		MINIUTILS_MAKE_CUSTOM_LOGGER(trace, "scanner", spdlog::level::trace);
+	}
+}
+
+namespace skse {
 	using SKSE::stl::report_and_fail;
 }
+
+[[noreturn]] inline void FatalerAssertAbsturz(
+	const char* expressionText,
+	const std::source_location& loc = std::source_location::current()) // Holt die Position des Aufrufers [2]
+{
+	// 1. Wir bauen eine extrem detaillierte Fehlermeldung
+	std::string crashMeldung = std::format(
+		"Assertion failed: ({}) in File: {}:{} ({})",
+		expressionText,
+		loc.file_name(),
+		loc.line(),
+		loc.function_name()
+	);
+
+	// 2. Unbedingt ins eigene Plugin-Log spiegeln
+	logger::critical("{}", crashMeldung);
+
+	// 3. Übergabe an Windows SEH für den Crash Logger SSE
+	// Wir kopieren den String in den Heap, damit der Zeiger im Dump garantiert gültig bleibt
+	char* permanentMessage = _strdup(crashMeldung.c_str());
+
+	ULONG_PTR args[2];
+	args[0] = 0xDEADC0DE;                          // Unser Plugin-Marker
+	args[1] = reinterpret_cast<ULONG_PTR>(permanentMessage); // Die detaillierte Nachricht
+
+	RaiseException(
+		0xE0000001,
+		EXCEPTION_NONCONTINUABLE,
+		2,
+		args
+	);
+}
+
+// Das Makro, das die Condition prüft und lesbar macht
+#define release_assert(expression) \
+    do { \
+        if (!(expression)) { \
+            FatalerAssertAbsturz(#expression); \
+        } \
+    } while (0)
+
+
+
 
 template <typename T>
 class singleton {
