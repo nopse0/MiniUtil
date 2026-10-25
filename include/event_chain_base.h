@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game_context.h"
+#include "fsm_state_fwd.h"
 
 namespace event_chain {
 
@@ -10,18 +11,51 @@ namespace event_chain {
 		float _delay_play_seconds = 0.f;
 		float _delay_game_days = 0.f;
 		float _delay_retry_play_seconds = 0.f;
+		bool  _is_active = false;
 		inline float get_next_p() const { return _next_play_second; }
 		inline float get_next_g() const { return _next_game_day; }
-		inline void update_cooldown(game::context& ctx, bool triggered) {
-			logger_custom::debug("forced_scene_1npc update cooldown");
-			if (!triggered) {
-				_next_play_second = ctx._clock.get_play_second() + _delay_retry_play_seconds;
-			}
-			else {
-				_next_play_second = ctx._clock.get_play_second() + _delay_play_seconds;
-				_next_game_day = ctx._clock.get_game_day() + _delay_game_days;
-			}
+		inline bool is_active() const { return _is_active; }
+
+		bool serialize(SKSE::SerializationInterface* a_serde);
+		int32_t deserialize(SKSE::SerializationInterface* a_serde);
+
+		inline void set_retry_cooldown(game::context& ctx) {
+			_is_active = false;
+			_next_play_second = ctx._clock.get_play_second() + _delay_retry_play_seconds;
+			logger_custom::debug("forced_scene_1npc set_retry_cooldown next_p={} next_g={}", get_next_p(), get_next_g());
+		}
+
+		inline void set_retry_cooldown_xl(game::context& ctx, float a_extra_large_p) {
+			_is_active = false;
+			_next_play_second = ctx._clock.get_play_second() + std::max(_delay_retry_play_seconds, a_extra_large_p);
+			logger_custom::debug("forced_scene_1npc set_retry_cooldown_xl next_p={} next_g={}", get_next_p(), get_next_g());
+		}
+
+		inline void set_regular_cooldown(game::context& ctx) {
+			_is_active = false;
+			_next_play_second = ctx._clock.get_play_second() + _delay_play_seconds;
+			_next_game_day = ctx._clock.get_game_day() + _delay_game_days;
+			logger_custom::debug("forced_scene_1npc set_regular_cooldown next_p={} next_g={}", get_next_p(), get_next_g());
 		}
 	};
+
+	// Bequeme Hilfsfunktion, um die Member-Funktion via Template aufzulösen und an die Instanz zu binden
+	template<typename Signature, typename ChainType, typename... Args>
+	auto bind_callback(uint32_t id, ChainType* chain_instance) {
+		// 1. Hole den rohen Member-Function-Pointer über das Signatur-Template
+		Signature mem_ptr = ChainType::template resolve<Signature>(id);
+
+		// 2. Erzeuge die std::function, die den Aufruf an die Instanz weiterleitet
+		std::function<std::optional<fsm::fsm_state>(game::context&, Args...)> final_cb = nullptr;
+
+		if (mem_ptr && chain_instance) {
+			final_cb = [chain_instance, mem_ptr](game::context& ctx, Args... args) -> std::optional<fsm::fsm_state> {
+				return (chain_instance->*mem_ptr)(ctx, args...);
+				};
+		}
+
+		// Rückgabe deines exakten Modells: pair<ID, std::function>
+		return std::make_pair(id, final_cb);
+	}
 
 }

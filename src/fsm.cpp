@@ -1,6 +1,4 @@
-#include "state_idle.h"
-#include "state_wait_timeout.h"
-#include "state_serve_scene_parameters.h"
+#include "state_all.h"
 #include "fsm.h"
 
 #if 0
@@ -58,14 +56,18 @@ void test()
 #endif
 
 namespace fsm {
-	//static_assert(IsValidState<state_idle>);
-	//static_assert(IsValidState<state_sleep>);
-	//static_assert(IsValidState<state_poll>);
-
-
-	fsm::fsm() {
+	//static_assert(IsValidState <state_idle>);
+	//static_assert(IsValidState <state_sleep>);
+	//static_assert(IsValidState <state_wait_dialog_finished>);
+	//static_assert(IsValidState <state_poll>);
+	//static_assert(IsValidState <state_serve_scene_parameters>);
+	//static_assert(IsValidState <state_wait_scene_started>);
+	//static_assert(IsValidState <state_wait_for_mod_event>);
+	
+	fsm::fsm() : _current_state(::fsm::state_idle{}) {
 
 	}
+
 
 	void fsm::process_timer_tick(game::context& a_ctx) {
 		// 1. Send the event down to the active variant state
@@ -74,6 +76,7 @@ namespace fsm {
 				return active_state.handle_tick(a_ctx);
 			}
 			else {
+				logger_custom::trace("current state didn't handle time tick");
 				return std::optional<fsm_state>{};
 			}
 		}, _current_state);

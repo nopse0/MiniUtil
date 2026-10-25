@@ -1,6 +1,4 @@
-#include "state_idle.h"
-#include "state_wait_timeout.h"
-#include "state_serve_scene_parameters.h"
+#include "state_all.h"
 #include "fsm.h"
 #include "controller.h"
 #include "minigame.h"
@@ -11,6 +9,7 @@
 #include "random.h"
 #include "papyrus_utils.h"
 #include "skyrim_util.h"
+#include "serialization.h"
 
 #if 0
 namespace controller {
@@ -601,11 +600,52 @@ namespace controller {
     void controller::revert() {
 
     }
-    void controller::serialize(SKSE::SerializationInterface* a_serde) {
+    bool controller::serialize(SKSE::SerializationInterface* a_serde) {
+        if (!_event_manager.serialize(a_serde))
+            return false;
 
+        bool success = serialization::SaveState(a_serde, _fsm.get_state());
+        
+        return success;
     }
-    uint32_t controller::deserialize(SKSE::SerializationInterface* a_serde) {
-        return 0;
+
+    int32_t controller::deserialize(SKSE::SerializationInterface* a_serde) {
+        int32_t read_bytes = 0;
+        int32_t current_read = 0;
+
+        current_read = _event_manager.deserialize(a_serde);
+        if (current_read < 0) return -1;
+        read_bytes += current_read;
+
+        auto ev = _event_manager.get_active_event();
+
+        if (ev == nullptr) {
+            return read_bytes;
+        }
+
+        fsm::fsm_state state;
+
+        // 3. Über std::visit die ECHTE Kette im Vektor als Referenz auspacken
+        // Das Sternchen (*ev) dereferenziert den Zeiger für visit
+        current_read = std::visit([a_serde, &state](auto& concrete_chain) -> int32_t {
+
+            // Dank 'auto&' ist 'concrete_chain' eine direkte Referenz auf das Element im Vektor!
+            // Jede Änderung hier modifiziert direkt dein Event im '_events'-Vector.
+
+            // Hier nutzen wir deine universelle OnGameLoad-Template-Funktion
+            
+            return serialization::LoadState(&concrete_chain, a_serde, state);
+
+            }, *ev);
+
+        if (current_read < 0)
+            return -1;
+        else
+            read_bytes += current_read;
+
+        _fsm.set_state(std::move(state));
+
+        return read_bytes;
     }
 
     // Mod event callback

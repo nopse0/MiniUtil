@@ -67,6 +67,8 @@ set(sources ${sources}
     src/skyrim_util.cpp
     src/backhug.cpp
     src/state_serve_scene_parameters.cpp
+    src/stat_manager.cpp
+    src/serializer.cpp
     src/fsm_snippet.cpp
     src/snippets.cpp
 )

@@ -170,16 +170,17 @@ namespace fsm { class fsm; }
 namespace event_chain {
 
 	template <typename T>
-	concept IsValidEventChain = requires(T ec, game::context& ctx, bool triggered) {
+	concept IsValidEventChain = requires(T ec, game::context& ctx, SKSE::SerializationInterface * a_serde) {
 		{ ec.trigger_phase1(ctx) } -> std::same_as<bool>;
 		{ ec.get_next_p() } -> std::same_as<float>;
 		{ ec.get_next_g() } -> std::same_as<float>;
-		{ ec.update_cooldown(ctx, triggered) } -> std::same_as<void>;
+		{ ec.set_retry_cooldown(ctx) } -> std::same_as<void>;
+		{ ec.serialize(a_serde) } -> std::same_as<bool>;
 	};
 
-	using event_variant = std::variant<forced_scene_1npc>;
+	using event_variant = std::variant<forced_scene_1npc::forced_scene_1npc>;
 
-	static_assert(IsValidEventChain<forced_scene_1npc>);
+	static_assert(IsValidEventChain<forced_scene_1npc::forced_scene_1npc>);
 
 	class manager
 	{
@@ -188,6 +189,11 @@ namespace event_chain {
 	public:
 		void initialize(game::context& ctx);
 		std::optional<fsm::fsm_state> trigger(game::context& ctx);
+
+		bool serialize(SKSE::SerializationInterface* a_serde);
+		int32_t deserialize(SKSE::SerializationInterface* a_serde);
+
+		event_variant* get_active_event();
 
 	private:
 		float get_next_trigger_time();

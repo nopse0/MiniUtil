@@ -1,6 +1,4 @@
-#include "state_idle.h"
-#include "state_wait_timeout.h"
-#include "state_serve_scene_parameters.h"
+#include "state_all.h"
 #include "fsm.h"
 #include "controller.h"
 #include "spdlog/cfg/helpers.h"
@@ -30,173 +28,6 @@ void LoggingTest() {
 	}*/
 	event_chain::logger_custom::debug("event_chain::logger_custom");
 }
-
-
-#if 0
-namespace scanner {
-	bool scan_actors(float a_radius, size_t a_nearest_males, size_t a_nearest_females,
-		std::vector<RE::Actor*>& a_male_actors, std::vector<bool>& a_male_see_player,
-		std::vector<RE::Actor*>& a_female_actors, std::vector<bool>& a_female_see_player);
-}
-
-bool actor_array_to_papyrus(RE::BSScript::Internal::VirtualMachine* vm, RE::BSScript::IObjectHandlePolicy* policy, std::vector<RE::Actor*>& actors,
-	RE::BSTSmartPointer<RE::BSScript::Array>& papyrusArray)
-{
-	RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo> actorTypeInfoPtr;
-	if (!vm->GetScriptObjectType("Actor", actorTypeInfoPtr) || !actorTypeInfoPtr) {
-		logger::error("Konnte ObjectTypeInfo für 'Actor' nicht finden!");
-		return false;
-	}
-
-	RE::BSScript::TypeInfo actorTypeInfo;
-	actorTypeInfo.SetType(static_cast<RE::BSScript::TypeInfo::RawType>(actorTypeInfoPtr->GetRawType()));
-
-	if (!vm->CreateArray(actorTypeInfo, static_cast<std::uint32_t>(actors.size()), papyrusArray) || !papyrusArray) {
-		return false;
-	}
-
-	for (std::size_t i = 0; i < actors.size(); ++i) {
-		RE::BSScript::Variable& elementVar = (*papyrusArray)[i];
-
-		if (actors[i]) {
-			RE::VMHandle actorHandle = policy->GetHandleForObject(RE::FormType::ActorCharacter, actors[i]);
-
-			RE::BSTSmartPointer<RE::BSScript::Object> actorObject;
-			if (vm->FindBoundObject(actorHandle, "Actor", actorObject) && actorObject) {
-				elementVar.SetObject(actorObject);
-			}
-			else {
-				elementVar.SetNone();
-			}
-		}
-		else {
-			elementVar.SetNone();
-		}
-
-		//(*papyrusArray)[i] = actorVar;
-	}
-
-	return true;
-}
-
-bool bool_array_to_papyrus(
-	RE::BSScript::Internal::VirtualMachine* vm,
-	RE::BSScript::IObjectHandlePolicy* policy,
-	const std::vector<bool>& booleans,  // Per Referenz übergeben, um Kopien zu vermeiden
-	RE::BSTSmartPointer<RE::BSScript::Array>& papyrusArray)
-{
-	RE::BSScript::TypeInfo boolTypeInfo;
-	boolTypeInfo.SetType(RE::BSScript::TypeInfo::RawType::kBool);
-
-	// Array über die VM erstellen
-	if (!vm->CreateArray(boolTypeInfo, static_cast<std::uint32_t>(booleans.size()), papyrusArray) || !papyrusArray) {
-		return false;
-	}
-
-	// Elemente direkt befüllen
-	for (std::size_t i = 0; i < booleans.size(); ++i) {
-		// 1. Sicheres Auslesen aus dem optimierten std::vector<bool>
-		bool actualValue = booleans[i];
-
-		// 2. Direkt die Referenz des Elements im Papyrus-Array holen und beschreiben
-		RE::BSScript::Variable& elementVar = (*papyrusArray)[i];
-		elementVar.SetBool(actualValue);
-	}
-
-	return true;
-}
-
-std::string ExecuteScan_ScriptName("MiniMolestApproach_Script");
-
-bool ExecuteScan(
-	RE::TESQuest* thisInstance,
-	float a_radius, int a_nearest_males, int a_nearest_females)
-{
-	logger::info("ExecuteScan");
-
-	if (!thisInstance)
-		return false;
-
-	auto vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-	if (!vm)
-		return false;
-
-	auto policy = vm->GetObjectHandlePolicy();
-	RE::VMHandle handle = policy->GetHandleForObject(thisInstance->GetFormType(), thisInstance);
-	if (handle == policy->EmptyHandle())
-		return false;
-
-	RE::BSTSmartPointer<RE::BSScript::Object> scriptObject;
-	if (!vm->FindBoundObject(handle, ExecuteScan_ScriptName.c_str(), scriptObject) || !scriptObject) {
-		return false;
-	}
-
-	logger::debug("Found {}", ExecuteScan_ScriptName.c_str());
-
-	std::vector<RE::Actor*> male_actors;
-	std::vector<bool>       male_see_player;
-	std::vector<RE::Actor*> female_actors;
-	std::vector<bool>       female_see_player;
-
-	auto result = scanner::scan_actors(a_radius, a_nearest_males, a_nearest_females, male_actors, male_see_player,
-		female_actors, female_see_player);
-	logger::debug("scan_actors: result = {}", result);
-	if (!result)
-		return false;
-
-	RE::BSTSmartPointer<RE::BSScript::Array> papyrus_male_actors;
-	if (actor_array_to_papyrus(vm, policy, male_actors, papyrus_male_actors)) {
-		logger::debug("Male actors array converted to Papyrus");
-		auto variableIter = scriptObject->GetVariable("MaleActors");
-		if (variableIter) {
-			logger::debug("Setting MaleActors_var");
-			logger::debug("Male actors size = {}", male_actors.size());
-			if (male_actors.size())
-				logger::debug("Male actors[0] = {}", (void*)(male_actors[0]));
-			RE::BSScript::Variable var;
-			var.SetArray(papyrus_male_actors);
-			*variableIter = var;
-		}
-	}
-	RE::BSTSmartPointer<RE::BSScript::Array> papyrus_female_actors;
-	if (actor_array_to_papyrus(vm, policy, female_actors, papyrus_female_actors)) {
-		auto variableIter = scriptObject->GetVariable("FemaleActors");
-		if (variableIter) {
-			logger::debug("Setting FemaleActors_var");
-			RE::BSScript::Variable var;
-			var.SetArray(papyrus_female_actors);
-			*variableIter = var;
-		}
-	}
-	RE::BSTSmartPointer<RE::BSScript::Array> papyrus_male_see_player;
-	if (bool_array_to_papyrus(vm, policy, male_see_player, papyrus_male_see_player)) {
-		auto variableIter = scriptObject->GetVariable("MaleSeePlayer");
-		if (variableIter) {
-			logger::debug("Setting MaleSeePlayer_var");
-			RE::BSScript::Variable var;
-			var.SetArray(papyrus_male_see_player);
-			*variableIter = var;
-		}
-	}
-	RE::BSTSmartPointer<RE::BSScript::Array> papyrus_female_see_player;
-	if (bool_array_to_papyrus(vm, policy, female_see_player, papyrus_female_see_player)) {
-		auto variableIter = scriptObject->GetVariable("FemaleSeePlayer");
-		if (variableIter) {
-			logger::debug("Setting FemaleSeePlayer_var");
-			RE::BSScript::Variable var;
-			var.SetArray(papyrus_female_see_player);
-			*variableIter = var;
-		}
-	}
-
-	return true;
-}
-
-void MinigameTestCpp(RE::TESQuest* thisInstance, int duration_secs)
-{
-	minigame::struggle_game::get_instance().start(duration_secs);
-}
-#endif
 
 void MiniUtil_OnDialogEnd(RE::StaticFunctionTag*, RE::Actor* akSpeaker)
 {
@@ -247,19 +78,10 @@ bool __stdcall on_input_minigame(RE::InputEvent* a_event) {
 	return minigame::struggle_game::get_instance().on_input(a_event);
 }
 
-#if 0
-void __stdcall render_ui() {
-	auto& s = events::manager::get_instance();
-	if (s.ui_is_loading())
-		return;
+	//static events::settings _settings;
+	//if (ImGuiMCP::InputDouble("base_chance", &_settings.base_chance_global)) {	
+	//}
 
-
-	static events::settings _settings;
-	if (ImGuiMCP::InputDouble("base_chance", &_settings.base_chance_global)) {
-		
-	}
-}
-#endif
 
 void InitializeMCP() {
 	if (!SKSEMenuFramework::IsInstalled()) {
@@ -307,6 +129,9 @@ void InitializeForms() {
 	const char* sexLab = "SexLab.esm";
 	form_cache::SexLabAnimatingFaction = dataHandler->LookupForm<RE::TESFaction>(0x0000E50F, sexLab);
 	form_cache::SexLabPlayerSexFaction = dataHandler->LookupForm<RE::TESFaction>(0x0004E12F, sexLab);
+
+	const char* sexLabAroused = "SexLabAroused.esm";
+	form_cache::SLAArousalFaction = dataHandler->LookupForm<RE::TESFaction>(0x0003FC36, sexLabAroused);
 }
 
 void InitializeSerialization()
@@ -473,6 +298,9 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
 
 	event_chain::logger_custom::init_logger();
 	fsm::logger_custom::init_logger();
+	animation::logger_custom::init_logger();
+	controller::logger_custom::init_logger();
+	scanner::logger_custom::init_logger();
 
 	spdlog::level::level_enum global_level = spdlog::level::info;
 	std::string cfg_string = "";

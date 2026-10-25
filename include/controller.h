@@ -99,8 +99,8 @@ namespace controller {
 
 		// SKSE Serialization
 		void revert();
-		void serialize(SKSE::SerializationInterface* a_serde);
-		uint32_t deserialize(SKSE::SerializationInterface* a_serde);
+		bool serialize(SKSE::SerializationInterface* a_serde);
+		int32_t deserialize(SKSE::SerializationInterface* a_serde);
 
 		// Mod event callback
 		virtual RE::BSEventNotifyControl ProcessEvent(const SKSE::ModCallbackEvent* a_event, RE::BSTEventSource<SKSE::ModCallbackEvent>* a_eventSource);

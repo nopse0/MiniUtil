@@ -1,6 +1,4 @@
-#include "state_idle.h"
-#include "state_wait_timeout.h"
-#include "state_serve_scene_parameters.h"
+#include "state_all.h"
 #include "papyrus_utils.h"
 
 // Communication with the Papyrus sattelite script
@@ -11,10 +9,10 @@ namespace fsm {
 		logger_custom::trace("state_serve_scene_parameters::handle_tick");
 		if (a_ctx._clock.get_play_second() >= _timeout_p) {
 			logger_custom::debug("state_serve_scene_parameters::handle_tick");
-			if (on_error) {
+			if (on_error.first) {
 				logger_custom::debug("state_serve_scene_parameters::handle_tick timeout, calling error callback");
 				// Forward whatever next state the lambda chooses back up to the FSM
-				return on_error(a_ctx);
+				return on_error.second(a_ctx);
 			}
 		}
 		return std::nullopt;
@@ -25,7 +23,7 @@ namespace fsm {
 
 		if (!a_this || a_handle != _handle) {
 			logger_custom::debug("state_serve_scene_parameters error a_this={} a_handle={}", (void*)a_this, a_handle);
-			return std::pair(false, on_error ? on_error(ctx) : std::nullopt);
+			return std::pair(false, on_error.first ? on_error.second(ctx) : std::nullopt);
 		}
 
 		auto vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
@@ -35,12 +33,12 @@ namespace fsm {
 		RE::VMHandle handle = policy->GetHandleForObject(a_this->GetFormType(), a_this);
 		if (handle == policy->EmptyHandle()) {
 			logger_custom::debug("state_serve_scene_parameters error vm handle={}", handle);
-			return std::pair(false, on_error ? on_error(ctx) : std::nullopt);
+			return std::pair(false, on_error.first ? on_error.second(ctx) : std::nullopt);
 		}
 		RE::BSTSmartPointer<RE::BSScript::Object> scriptObject;
 		if (!vm->FindBoundObject(handle, "MiniMolestMain_Script", scriptObject) || !scriptObject) {
 			logger_custom::debug("state_serve_scene_parameters error scriptObject=", (void*)scriptObject.get());
-			return std::pair(false, on_error ? on_error(ctx) : std::nullopt);
+			return std::pair(false, on_error.first ? on_error.second(ctx) : std::nullopt);
 		}
 
 		logger_custom::debug("state_serve_scene_parameters Found script {}", "MiniMolestMain_Script");
@@ -74,18 +72,18 @@ namespace fsm {
 		}
 
 		if (success_full == 2)
-			return std::pair(true, on_success ? on_success(ctx) : std::nullopt);
+			return std::pair(true, on_success.first ? on_success.second(ctx) : std::nullopt);
 		else
-			return std::pair(false, on_error ? on_error(ctx) : std::nullopt);
+			return std::pair(false, on_error.first ? on_error.second(ctx) : std::nullopt);
 	}
 
 	std::optional<fsm_state> state_wait_scene_started::handle_tick(game::context& a_ctx) {
 		logger_custom::trace("state_wait_scene_started::handle_tick");
 		if (a_ctx._clock.get_play_second() >= _timeout_p) {
-			if (on_error) {
+			if (on_error.first) {
 				logger_custom::debug("state_wait_scene_started::handle_tick timeout, calling error callback");
 				// Forward whatever next state the lambda chooses back up to the FSM
-				return on_error(a_ctx);
+				return on_error.second(a_ctx);
 			}
 		}
 		return std::nullopt;
@@ -95,18 +93,18 @@ namespace fsm {
 		logger_custom::debug("state_wait_scene_started::handle_set_scene_thread_id id={}", a_thread_id);
 		if (a_handle != _handle) {
 			logger_custom::debug("state_wait_scene_started::handle_set_scene_thread_id error a_handle={}", a_handle);
-			return std::pair(false, on_error ? on_error(ctx) : std::nullopt);
+			return std::pair(false, on_error.first ? on_error.second(ctx) : std::nullopt);
 		}
-		return std::pair(true, on_success ? on_success(ctx) : std::nullopt);
+		return std::pair(true, on_success.first ? on_success.second(ctx) : std::nullopt);
 	}
 
 	std::pair<bool, std::optional<fsm_state>> state_wait_scene_started::handle_set_scene_error(game::context& ctx, float a_handle) {
 		logger_custom::debug("state_wait_scene_started::handle_set_scene_error");
 		if (a_handle != _handle) {
 			logger_custom::debug("state_wait_scene_started::handle_set_scene_error error a_handle={}", a_handle);
-			return std::pair(false, on_error ? on_error(ctx) : std::nullopt);
+			return std::pair(false, on_error.first ? on_error.second(ctx) : std::nullopt);
 		}
-		return std::pair(false, on_error ? on_error(ctx) : std::nullopt);
+		return std::pair(false, on_error.first ? on_error.second(ctx) : std::nullopt);
 	}
 
 }

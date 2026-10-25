@@ -12,4 +12,7 @@ namespace form_cache {
     // SexLab
     inline RE::TESFaction* SexLabAnimatingFaction = nullptr;
     inline RE::TESFaction* SexLabPlayerSexFaction = nullptr;
+
+    // SLA
+    inline RE::TESFaction* SLAArousalFaction = nullptr;
 }

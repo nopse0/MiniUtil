@@ -3,9 +3,6 @@
 #include "fsm_state_fwd.h"
 #include "game_context.h"
 
-//#include "state_idle.h"
-//#include "state_callback.h"
-
 namespace fsm {
 
 #if 0
@@ -79,26 +76,22 @@ namespace fsm {
 #endif
 	class fsm;
 
-	template <typename T>
-	concept IsValidState = requires(T s, fsm& a_fsm, game::context& a_ctx, RE::Actor* a_speaker) {
-		{ s.handle_tick(a_fsm, a_ctx) }   -> std::same_as<std::optional<fsm_state>>;
-		{ s.handle_dialog_finished(a_fsm, a_ctx, a_speaker) } -> std::same_as<std::optional<fsm_state>>;
-	};
-
-
-
-	//static_assert(IsValidState<state_idle>);
-	//static_assert(IsValidState<state_callback>);
-
-	//struct state_sleep;
-	//struct state_force_greet_two;
-
+	//template <typename T>
+	//concept IsValidState = requires(T s, game::context& a_ctx) {
+	//	{ s.pre_save(a_ctx) } -> std::same_as<std::optional<fsm_state>>; // we need this for serialization, return to a state which can be saved
+	//};
 
 	class fsm {
 		fsm_state _current_state;
 
 	public:
 		fsm();
+
+		fsm_state& get_state() { return _current_state; }
+		
+		void set_state(fsm_state&& a_loaded_state) {
+			_current_state = std::move(a_loaded_state);
+		}
 
 		// T is the specific state type you want to change to
 		//template <typename T, typename... Args>

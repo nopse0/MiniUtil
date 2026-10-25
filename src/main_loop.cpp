@@ -1,6 +1,4 @@
-#include "state_idle.h"
-#include "state_wait_timeout.h"
-#include "state_serve_scene_parameters.h"
+#include "state_all.h"
 #include "fsm.h"
 #include "controller.h"
 
@@ -41,6 +39,7 @@ namespace main_loop {
             // 1. Always call the original engine function (or the next mod in the chain) first
             _original_update_func(a_this);
             
+            //logger::info("hook_update_func: ModDisabled={}", ModDisabled);
             if (ModDisabled)
                 return;
 
@@ -53,7 +52,7 @@ namespace main_loop {
 			frame_count++;
             if (frame_count >= next_tick_count) {
 				frame_count = 0;
-                //logger::trace("hook_update_func: emitting timer tick");
+                //logger::info("hook_update_func: emitting timer tick");
 				next_tick_count = controller::controller::get_instance().next_timer_tick(_accumulated_play_time);
 				_accumulated_play_time = 0.f;
             }
