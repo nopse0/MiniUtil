@@ -2,7 +2,7 @@
 #include "fsm.h"
 #include "controller.h"
 #include "spdlog/cfg/helpers.h"
-#include "minigame.h"
+#include "struggle_game.h"
 #include "form_cache.h"
 #include "actor_util.h"
 #include "sl_scenes.h"
@@ -43,18 +43,11 @@ bool MiniMolest_GetSceneParameters(RE::TESQuest* thisInstance, float handle)
 	return controller::controller::get_instance().on_get_scene_parameters(thisInstance, handle);
 }
 
-bool MiniUtil_SetSceneThreadID(RE::StaticFunctionTag*, float handle, uint32_t threadId)
+bool MiniUtil_SetSceneThreadID(RE::StaticFunctionTag*, float handle, int32_t threadId)
 {
 	if (ModDisabled)
 		return false;
 	return controller::controller::get_instance().on_set_scene_thread_id(handle, threadId);
-}
-
-bool MiniUtil_SetSceneError(RE::StaticFunctionTag*, float handle)
-{
-	if (ModDisabled)
-		return false;
-	return controller::controller::get_instance().on_set_scene_error(handle);
 }
 
 bool RegisterPapyrusFunctions(RE::BSScript::IVirtualMachine* vm)
@@ -64,7 +57,6 @@ bool RegisterPapyrusFunctions(RE::BSScript::IVirtualMachine* vm)
 	vm->RegisterFunction("OnDialogEnd", "MiniUtil_Script", MiniUtil_OnDialogEnd);
 	vm->RegisterFunction("GetSceneParameters", "MiniMolestMain_Script", MiniMolest_GetSceneParameters);
 	vm->RegisterFunction("SetSceneThreadID", "MiniUtil_Script", MiniUtil_SetSceneThreadID);
-	vm->RegisterFunction("SetSceneError", "MiniUtil_Script", MiniUtil_SetSceneError);
 
 	return true;
 }
@@ -237,7 +229,8 @@ void InitializeSerialization()
 						break;
 
 					default:
-						logger::error("Unbekannter Subtype im MMST-Record gefunden! Breche Laden ab, um Korruption zu verhindern.");
+						logger::error("Unbekannter Subtype im MMST-Record gefunden!  bytesRead={},  randomGeneratorRead={}, controllerRead={}",
+							bytesRead, randomGeneratorRead, controllerRead);
 						return;
 					}
 				}
@@ -248,6 +241,7 @@ void InitializeSerialization()
 				logger::info("Record 'MMST' read from save game.");
 			}
 		}
+
 		});
 }
 
@@ -288,7 +282,7 @@ void OnSKSEMessage(SKSE::MessagingInterface::Message* a_msg)
 
 // Der SKSE Einstiegspunkt
 extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface* a_skse) {
-	SKSE::Init(a_skse);
+	SKSE::Init(a_skse, SKSE::InitInfo{.logRotate=1});
 
 	//===========================================================================
 

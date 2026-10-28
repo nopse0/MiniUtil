@@ -44,7 +44,7 @@ namespace main_loop {
                 return;
 
             auto tim = RE::BSTimer::GetSingleton();
-            _accumulated_play_time += tim->realTimeDelta;
+            _accumulated_play_time += tim->realTimeDelta; // naming is wrong, we accumulate wall-clock time, not play time
             
             // 2. Safely execute your plugin logic AFTER the frame has processed
             static uint32_t frame_count = 0;

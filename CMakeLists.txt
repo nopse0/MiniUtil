@@ -56,7 +56,6 @@ set(sources ${sources}
     src/main_loop.cpp
     src/actor_util.cpp
     src/controller.cpp
-    src/sl_scenes.cpp
     src/papyrus_utils.cpp
     src/random.cpp
     src/fsm.cpp

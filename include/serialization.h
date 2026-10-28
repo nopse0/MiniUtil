@@ -28,8 +28,36 @@ namespace serialization {
         Idx_WaitForModEvent
     };
 
+    int32_t LoadFreeState(SKSE::SerializationInterface* a_serde, fsm::fsm_state& out_state) {
+
+        uint32_t loaded_state_type = 0;
+        int32_t read_bytes = 0;
+        read_bytes = a_serde->ReadRecordData(&loaded_state_type, sizeof(loaded_state_type));
+        if (read_bytes != sizeof(loaded_state_type)) {
+            logger::critical("Fehler beim Laden des FSM - Records: Unerwartetes Dateiende!");
+            out_state = std::monostate{};
+            return -1;
+        }
+
+        // 2. Der Switch bestimmt, WELCHE Daten jetzt aus dem Savegame gelesen werden müssen
+        switch (loaded_state_type) {
+
+        case static_cast<uint32_t>(StateId::Idx_None):
+            out_state = std::monostate{};
+            return read_bytes;
+
+        case static_cast<uint32_t>(StateId::Idx_Idle):
+            out_state = fsm::state_idle{};
+            return read_bytes;
+        }
+
+        out_state = std::monostate{};
+        return -1;
+    }
+
+
     template<typename ChainType>
-    int32_t LoadState(ChainType* active_chain, SKSE::SerializationInterface* a_serde, fsm::fsm_state& out_state /* Oder aus Savegame lesen */) {
+    int32_t LoadEventState(ChainType* active_chain, SKSE::SerializationInterface* a_serde, fsm::fsm_state& out_state /* Oder aus Savegame lesen */) {
 
         // 1. Lies den State-Index/Typ aus dem Savegame (Simuliert)
         uint32_t loaded_state_type = 0;
@@ -98,18 +126,19 @@ namespace serialization {
             return false;
 
         bool success = std::visit(overloaded{
-        [](std::monostate&) { return true; },
-        [a_serde](fsm::state_idle& s) { return true; },
-        [a_serde](fsm::state_sleep& s) { return false; },
+        [](std::monostate&) { logger::info("SaveState: std::monostate");  return true; },
+        [a_serde](fsm::state_idle& s) { logger::info("SaveState: state_idle"); return true; },
+        [a_serde](fsm::state_sleep& s) { logger::info("SaveState: state_sleep"); return false; },
         [a_serde](fsm::state_wait_dialog_finished& s) {
+                logger::info("SaveState: state_wait_dialog_finished");
                 return a_serde->WriteRecordData(&s.on_timeout.first, sizeof(s.on_timeout.first))
                     && a_serde->WriteRecordData(&s.on_dialog_finished.first, sizeof(s.on_dialog_finished.first))
                     && a_serde->WriteRecordData(&s._timeout_p, sizeof(s._timeout_p));
             },
-        [a_serde](fsm::state_poll& s) { return false; },
-        [a_serde](fsm::state_serve_scene_parameters& s) { return false; },
-        [a_serde](fsm::state_wait_scene_started& s) { return false; },
-        [a_serde](fsm::state_wait_for_mod_event& s) { return false; }
+        [a_serde](fsm::state_poll& s) { logger::info("SaveState: state_poll"); return false; },
+        [a_serde](fsm::state_serve_scene_parameters& s) { logger::info("SaveState: state_serve_scene_parameters"); return false; },
+        [a_serde](fsm::state_wait_scene_set_thread_id& s) { logger::info("SaveState: state_wait_scene_set_thread_id"); return false; },
+        [a_serde](fsm::state_wait_for_mod_event& s) { logger::info("SaveState: state_wait_for_mod_event"); return false; }
             }, out_state);
 
         return success;

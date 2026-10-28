@@ -16,7 +16,7 @@ namespace event_chain {
 		inline float get_next_g() const { return _next_game_day; }
 		inline bool is_active() const { return _is_active; }
 
-		bool serialize(SKSE::SerializationInterface* a_serde);
+		bool serialize(SKSE::SerializationInterface* a_serde, float a_current_time);
 		int32_t deserialize(SKSE::SerializationInterface* a_serde);
 
 		inline void set_retry_cooldown(game::context& ctx) {

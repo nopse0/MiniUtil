@@ -1,8 +1,8 @@
 #pragma once
 
-#include "time_manager.h"
+#include "clock.h"
 #include "settings.h"
-#include "minigame.h"
+#include "struggle_game.h"
 #include "sl_scenes.h"
 #include "random.h"
 
@@ -15,7 +15,7 @@ namespace game {
 
 	struct context {
 		settings::settings& _settings;
-		time_manager::clock& _clock;
+		timing::clock& _clock;
 		event_chain::manager& _event_chain_manager;
 		minigame::struggle_game& _struggle_game;
 		sl_scenes::sl_scene_starter& _scene_starter;

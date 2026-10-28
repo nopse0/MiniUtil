@@ -1,7 +1,7 @@
 #include "state_all.h"
 #include "fsm.h"
 #include "controller.h"
-#include "minigame.h"
+#include "struggle_game.h"
 #include "scanner.h"
 #include "actor_util.h"
 #include "form_cache.h"
@@ -598,12 +598,14 @@ namespace controller {
 
     // SKSE Serialization
     void controller::revert() {
-
+        _context._clock.set_play_second(0.f);
     }
     bool controller::serialize(SKSE::SerializationInterface* a_serde) {
-        if (!_event_manager.serialize(a_serde))
+        logger::info("controller::serialize: saving event_manager");
+        if (!_event_manager.serialize(a_serde, _context))
             return false;
 
+        logger::info("controller::serialize: saving fsm state");
         bool success = serialization::SaveState(a_serde, _fsm.get_state());
         
         return success;
@@ -612,39 +614,32 @@ namespace controller {
     int32_t controller::deserialize(SKSE::SerializationInterface* a_serde) {
         int32_t read_bytes = 0;
         int32_t current_read = 0;
+        logger_custom::debug("controller::deserialize");
 
         current_read = _event_manager.deserialize(a_serde);
         if (current_read < 0) return -1;
         read_bytes += current_read;
 
         auto ev = _event_manager.get_active_event();
-
-        if (ev == nullptr) {
-            return read_bytes;
-        }
+        logger_custom::debug("controller::deserialize read_bytes={} ev={}", read_bytes, (void*)ev);
 
         fsm::fsm_state state;
 
-        // 3. Über std::visit die ECHTE Kette im Vektor als Referenz auspacken
-        // Das Sternchen (*ev) dereferenziert den Zeiger für visit
-        current_read = std::visit([a_serde, &state](auto& concrete_chain) -> int32_t {
-
-            // Dank 'auto&' ist 'concrete_chain' eine direkte Referenz auf das Element im Vektor!
-            // Jede Änderung hier modifiziert direkt dein Event im '_events'-Vector.
-
-            // Hier nutzen wir deine universelle OnGameLoad-Template-Funktion
-            
-            return serialization::LoadState(&concrete_chain, a_serde, state);
-
-            }, *ev);
-
-        if (current_read < 0)
-            return -1;
-        else
-            read_bytes += current_read;
-
+        if (ev == nullptr) {
+            current_read = serialization::LoadFreeState(a_serde, state);
+            if (current_read < 0) return -1; else read_bytes += current_read;
+        }
+        else {
+            // 3. Über std::visit die ECHTE Kette im Vektor als Referenz auspacken
+            // Das Sternchen (*ev) dereferenziert den Zeiger für visit
+            current_read = std::visit([a_serde, &state](auto& concrete_chain) -> int32_t {
+                return serialization::LoadEventState(&concrete_chain, a_serde, state);
+                }, *ev);
+            if (current_read < 0) return -1; else read_bytes += current_read;
+        }
         _fsm.set_state(std::move(state));
 
+        logger_custom::debug("controller::deserialize current_read={} read_bytes={}", current_read, read_bytes);
         return read_bytes;
     }
 
@@ -666,25 +661,21 @@ namespace controller {
         return _fsm.process_get_scene_parameters(_context, a_this, a_handle);
     }
 
-    bool controller::on_set_scene_thread_id(float a_handle, uint32_t a_thread_id) {
+    bool controller::on_set_scene_thread_id(float a_handle, int32_t a_thread_id) {
         return _fsm.process_set_scene_thread_id(_context, a_handle, a_thread_id);
-    }
-
-    bool controller::on_set_scene_error(float a_handle) {
-        return _fsm.process_set_scene_error(_context, a_handle);
     }
 
     // Skyrim Update loop hook
     uint32_t controller::next_timer_tick(float a_play_time_delta_seconds) {
 
-        // advance time first (so scheduling uses same time base as Papyrus Wait)
-        _clock.update_play_second(a_play_time_delta_seconds);
-        logger_custom::trace("controller::next_timer_tick current play time = {}", _clock.get_play_second());
-
+        // only advance clock, if playing
         if (!skyrim_util::is_playing()) {
             logger_custom::trace("controller::next_timer_tick aborted, not playing");
-            return 1;
+            return 6;
         }
+
+        _clock.update_play_second(a_play_time_delta_seconds);
+        logger_custom::trace("controller::next_timer_tick current play time = {}", _clock.get_play_second());
 
         _fsm.process_timer_tick(_context);
         return 6;  // next tick in 6 frames

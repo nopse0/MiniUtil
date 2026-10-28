@@ -1,6 +1,6 @@
 #pragma once
 
-#include "time_manager.h"
+#include "clock.h"
 #include "fsm.h"
 #include "events.h"
 
@@ -108,8 +108,7 @@ namespace controller {
 		// Functions called from Papyrus scripts
 		void on_dialog_end(RE::Actor* a_speaker);
 		bool on_get_scene_parameters(RE::TESQuest* a_this, float a_handle);
-		bool on_set_scene_thread_id(float a_handle, uint32_t a_thread_id);
-		bool on_set_scene_error(float a_handle);
+		bool on_set_scene_thread_id(float a_handle, int32_t a_thread_id);
 
 		// Skyrim Update loop hook
 		uint32_t next_timer_tick(float a_play_time_delta_seconds);
@@ -117,7 +116,7 @@ namespace controller {
 	private:
 		fsm::fsm _fsm;
 		settings::settings _settings;
-		time_manager::clock _clock;
+		timing::clock _clock;
 		event_chain::manager _event_manager;
 		//minigame::struggle_game _struggle_game;
 		sl_scenes::sl_scene_starter _scene_starter;

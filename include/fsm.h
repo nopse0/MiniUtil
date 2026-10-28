@@ -105,8 +105,7 @@ namespace fsm {
 		void process_mod_event(game::context& a_ctx, RE::BSFixedString a_event_name);
 
 		bool process_get_scene_parameters(game::context& a_ctx, RE::TESQuest* a_this, float a_handle);
-		bool process_set_scene_thread_id(game::context& a_ctx, float a_handle, uint32_t a_thread_id);
-		bool process_set_scene_error(game::context& a_ctx, float a_handle);
+		bool process_set_scene_thread_id(game::context& a_ctx, float a_handle, int32_t a_thread_id);
 	};
 
 

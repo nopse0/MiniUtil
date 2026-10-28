@@ -11,7 +11,7 @@ namespace fsm {
     struct state_wait_dialog_finished;
     struct state_poll;
     struct state_serve_scene_parameters;
-    struct state_wait_scene_started;
+    struct state_wait_scene_set_thread_id;
     struct state_wait_for_mod_event;
 
     // 2. Define the variant type alias
@@ -24,7 +24,7 @@ namespace fsm {
         state_wait_dialog_finished,
         state_poll,
         state_serve_scene_parameters,
-        state_wait_scene_started,
+        state_wait_scene_set_thread_id,
         state_wait_for_mod_event
     >;
 

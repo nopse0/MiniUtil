@@ -1,4 +1,4 @@
-#include "minigame.h"
+#include "struggle_game.h"
 
 namespace minigame {
 

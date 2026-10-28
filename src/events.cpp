@@ -191,12 +191,14 @@ namespace event_chain {
 		_events.push_back(std::move(fs));
 	}
 
-	bool manager::serialize(SKSE::SerializationInterface* a_serde) {
+	bool manager::serialize(SKSE::SerializationInterface* a_serde, game::context& ctx) {
 		// 1. Anzahl der Event-Ketten speichern
 		uint32_t num_events = static_cast<uint32_t>(_events.size());
 		if (!a_serde->WriteRecordData(&num_events, sizeof(num_events))) {
 			return false;
 		}
+
+		auto current_time = ctx._clock.get_play_second();
 
 		// 2. Jede einzelne Kette (inklusive Typ!) über std::visit serialisieren
 		for (auto& a_chain : _events) {
@@ -204,8 +206,8 @@ namespace event_chain {
 			if (!a_serde->WriteRecordData(&chain_type_index, sizeof(chain_type_index))) {
 				return false;
 			}
-			bool chain_success = std::visit([a_serde](auto& ev) -> bool {
-				return ev.serialize(a_serde);
+			bool chain_success = std::visit([a_serde, current_time](auto& ev) -> bool {
+				return ev.serialize(a_serde, current_time);
 				}, a_chain);
 
 			if (!chain_success) {

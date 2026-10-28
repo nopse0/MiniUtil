@@ -140,7 +140,7 @@ namespace fsm {
 		return result.first;
 	}
 
-	bool fsm::process_set_scene_thread_id(game::context& a_ctx, float a_handle, uint32_t a_thread_id) {
+	bool fsm::process_set_scene_thread_id(game::context& a_ctx, float a_handle, int32_t a_thread_id) {
 		auto result = std::visit([&a_ctx, a_handle, a_thread_id](auto& active_state) {
 			if constexpr (requires { active_state.handle_set_scene_thread_id(a_ctx, a_handle, a_thread_id); }) {
 				return active_state.handle_set_scene_thread_id(a_ctx, a_handle, a_thread_id);
@@ -155,25 +155,6 @@ namespace fsm {
 		}
 
 		logger_custom::debug("fsm:::process_set_scene_thread_id result = {}", result.first);
-
-		return result.first;
-	}
-
-	bool fsm::process_set_scene_error(game::context& a_ctx, float a_handle) {
-		auto result = std::visit([&a_ctx, a_handle](auto& active_state) {
-			if constexpr (requires { active_state.handle_set_scene_error(a_ctx, a_handle); }) {
-				return active_state.handle_set_scene_error(a_ctx, a_handle);
-			}
-			else {
-				return std::pair(false, std::optional<fsm_state>{});
-			}
-			}, _current_state);
-
-		if (result.second.has_value()) {
-			_current_state = std::move(*result.second);
-		}
-
-		logger_custom::debug("fsm:::process_set_scene_error result = {}", result.first);
 
 		return result.first;
 	}
