@@ -72,6 +72,13 @@ namespace event_chain {
                 if constexpr (std::is_same_v<Signature, std::optional<fsm::fsm_state>(forced_scene_1npc::*)(game::context&)>) {
                     switch (id) {
                     case wait_dialog_finished_timeout_id: return &forced_scene_1npc::wait_dialog_finished_timeout_cb;
+                    case backhug_sleep1_id: return &forced_scene_1npc::backhug_sleep1_cb;
+                    case backhug_sleep2_id: return &forced_scene_1npc::backhug_sleep2_cb;
+                    case poll_struggle_game_id: return &forced_scene_1npc::poll_struggle_game_cb;
+                    case serve_scene_parameters_timeout_id: return &forced_scene_1npc::serve_scene_parameters_timeout_cb;
+                    case set_scene_thread_id_set_id: return &forced_scene_1npc::set_scene_thread_id_timeout_cb;
+                    case wait_for_mod_event_timeout_id: return &forced_scene_1npc::wait_for_mod_event_timeout_cb;
+                    case wait_for_mod_event_received_id: return &forced_scene_1npc::wait_for_mod_event_received_cb;
                     default: return nullptr;
                     }
                 }
@@ -79,6 +86,20 @@ namespace event_chain {
                 else if constexpr (std::is_same_v<Signature, std::optional<fsm::fsm_state>(forced_scene_1npc::*)(game::context&, RE::Actor*)>) {
                     switch (id) {
                     case wait_dialog_finished_success_id: return &forced_scene_1npc::wait_dialog_finished_success_cb;
+                    default: return nullptr;
+                    }
+                }
+                // SIGNATUR 3:
+                else if constexpr (std::is_same_v<Signature, std::pair<bool, std::optional<fsm::fsm_state>>(forced_scene_1npc::*)(game::context&, RE::TESQuest * a_this, float a_handle)>) {
+                    switch (id) {
+                    case serve_scene_parameters_serve_id: return &forced_scene_1npc::serve_scene_parameters_serve_cb;
+                    default: return nullptr;
+                    }
+                }
+                // SIGNATUR 4:
+                else if constexpr (std::is_same_v<Signature, std::pair<bool, std::optional<fsm::fsm_state>>(forced_scene_1npc::*)(game::context&, float a_handle, int32_t a_thread_id)>) {
+                    switch (id) {
+                    case set_scene_thread_id_set_id: return &forced_scene_1npc::set_scene_thread_id_set_cb;
                     default: return nullptr;
                     }
                 }

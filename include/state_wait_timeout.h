@@ -44,6 +44,19 @@ namespace fsm {
 		std::optional<fsm_state> handle_dialog_finished(game::context& a_ctx, RE::Actor* a_speaker);
 	};
 
+	struct state_poll {
+		std::pair < uint32_t, std::function<std::optional<fsm_state>(game::context& a_context)>> poll;
+
+		// Standard constructor
+		state_poll(
+			std::pair < uint32_t, std::function<std::optional<fsm_state>(game::context& a_context)>> poll_cb)
+			:
+			poll(std::move(poll_cb)) {
+		}
+
+		std::optional<fsm_state> handle_tick(game::context& a_ctx);
+	};
+
 	struct state_wait_for_mod_event {
 		float _timeout_p = 0.f;
 		RE::BSFixedString _event_name;
@@ -63,18 +76,6 @@ namespace fsm {
 
 		std::optional<fsm_state> handle_tick(game::context& a_ctx);
 		std::optional<fsm_state> handle_mod_event(game::context& a_ctx, RE::BSFixedString a_event_name);
-	};
-
-	struct state_poll {
-		std::pair < uint32_t, std::function<std::optional<fsm_state>(game::context& a_context)>> poll;
-
-		// Standard constructor
-		state_poll(
-			std::pair < uint32_t, std::function<std::optional<fsm_state>(game::context& a_context)>> poll_cb)
-			: 
-			poll(std::move(poll_cb)) {}
-
-		std::optional<fsm_state> handle_tick(game::context& a_ctx);
 	};
 
 }

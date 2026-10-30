@@ -39,23 +39,40 @@ namespace event_chain {
 		}
 	};
 
-	// Bequeme Hilfsfunktion, um die Member-Funktion via Template aufzulösen und an die Instanz zu binden
-	template<typename Signature, typename ChainType, typename... Args>
-	auto bind_callback(uint32_t id, ChainType* chain_instance) {
-		// 1. Hole den rohen Member-Function-Pointer über das Signatur-Template
-		Signature mem_ptr = ChainType::template resolve<Signature>(id);
+	
+	// 1. Das primäre Template der Hilfsstruktur (wird nie direkt aufgerufen)
+	template<typename Signature>
+	struct CallbackBinder;
 
-		// 2. Erzeuge die std::function, die den Aufruf an die Instanz weiterleitet
-		std::function<std::optional<fsm::fsm_state>(game::context&, Args...)> final_cb = nullptr;
+	// 2. Die Partial Specialization für Member-Function-Pointer
+	template<typename R, typename ChainType, typename... Args>
+	struct CallbackBinder<R(ChainType::*)(Args...)> {
 
-		if (mem_ptr && chain_instance) {
-			final_cb = [chain_instance, mem_ptr](game::context& ctx, Args... args) -> std::optional<fsm::fsm_state> {
-				return (chain_instance->*mem_ptr)(ctx, args...);
-				};
+		static auto bind(uint32_t id, ChainType* chain_instance) {
+			using MemPtrType = R(ChainType::*)(Args...);
+
+			// 1. Hole den rohen Member-Function-Pointer über dein resolve-Template
+			MemPtrType mem_ptr = ChainType::template resolve<MemPtrType>(id);
+
+			// 2. Erzeuge die std::function mit dynamischem Rückgabetyp und Argumenten
+			std::function<R(Args...)> final_cb = nullptr;
+
+			if (mem_ptr && chain_instance) {
+				final_cb = [chain_instance, mem_ptr](Args... args) -> R {
+					return (chain_instance->*mem_ptr)(args...);
+					};
+			}
+
+			// Rückgabe des Paars: pair<uint32_t, std::function<R(Args...)>>
+			return std::make_pair(id, final_cb);
 		}
+	};
 
-		// Rückgabe deines exakten Modells: pair<ID, std::function>
-		return std::make_pair(id, final_cb);
+	// 3. Die saubere Wrapper-Funktion, die du in deinem Code aufrufst
+	template<typename Signature, typename ChainType>
+	auto bind_callback(uint32_t id, ChainType* chain_instance) {
+		return CallbackBinder<Signature>::bind(id, chain_instance);
 	}
+
 
 }

@@ -46,35 +46,4 @@ namespace fsm {
 		return std::make_pair(false, std::nullopt);
 	}
 
-
-	//std::optional<fsm_state> state_wait_scene_started::handle_tick(game::context& a_ctx) {
-	//	logger_custom::trace("state_wait_scene_started::handle_tick");
-	//	if (a_ctx._clock.get_play_second() >= _timeout_p) {
-	//		if (on_error.first) {
-	//			logger_custom::debug("state_wait_scene_started::handle_tick timeout, calling error callback");
-	//			// Forward whatever next state the lambda chooses back up to the FSM
-	//			return on_error.second(a_ctx);
-	//		}
-	//	}
-	//	return std::nullopt;
-	//}
-	//
-	//std::pair<bool, std::optional<fsm_state>> state_wait_scene_started::handle_set_scene_thread_id(game::context& ctx, float a_handle, uint32_t a_thread_id) {
-	//	logger_custom::debug("state_wait_scene_started::handle_set_scene_thread_id id={}", a_thread_id);
-	//	if (a_handle != _handle) {
-	//		logger_custom::debug("state_wait_scene_started::handle_set_scene_thread_id error a_handle={}", a_handle);
-	//		return std::pair(false, on_error.first ? on_error.second(ctx) : std::nullopt);
-	//	}
-	//	return std::pair(true, on_success.first ? on_success.second(ctx) : std::nullopt);
-	//}
-
-	//std::pair<bool, std::optional<fsm_state>> state_wait_scene_started::handle_set_scene_error(game::context& ctx, float a_handle) {
-	//	logger_custom::debug("state_wait_scene_started::handle_set_scene_error");
-	//	if (a_handle != _handle) {
-	//		logger_custom::debug("state_wait_scene_started::handle_set_scene_error error a_handle={}", a_handle);
-	//		return std::pair(false, on_error.first ? on_error.second(ctx) : std::nullopt);
-	//	}
-	//	return std::pair(false, on_error.first ? on_error.second(ctx) : std::nullopt);
-	//}
-
 }

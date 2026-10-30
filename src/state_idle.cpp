@@ -4,9 +4,6 @@
 #include "events.h"
 
 namespace fsm {
-	std::optional<fsm_state> pre_save(game::context& a_ctx) {
-		return std::nullopt;
-	}
 
 	std::optional<fsm_state> state_idle::handle_tick(game::context& a_ctx) {
 		logger_custom::trace("state_idle::handle_tick handle timer tick");		

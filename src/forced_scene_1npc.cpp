@@ -11,6 +11,7 @@
 #include "random.h"
 #include "fsm_loader.h"
 #include "papyrus_utils.h"
+#include "serialization.h"
 
 namespace event_chain {
 
@@ -18,6 +19,7 @@ namespace event_chain {
         uint8_t active = _is_active;
         auto next_play_second = _next_play_second - a_current_time;  // save offset to current time, because clock starts at 0 again, when game is loaded
         if (next_play_second < 0.f) next_play_second = 0.f;
+        
         return a_serde->WriteRecordData(&next_play_second, sizeof(next_play_second))
             && a_serde->WriteRecordData(&_next_game_day, sizeof(_next_game_day))
             && a_serde->WriteRecordData(&_delay_play_seconds, sizeof(_delay_play_seconds))
@@ -50,9 +52,27 @@ namespace event_chain {
 
     namespace forced_scene_1npc {
         bool forced_scene_1npc::serialize(SKSE::SerializationInterface* a_serde, float a_current_time) {
-            if (!delayed::serialize(a_serde, a_current_time))
+            // delayed fields and active flag
+            if (!delayed::serialize(a_serde, a_current_time)) return false;
+
+            // backhug data
+            uint8_t has_opt = _backhug_data.has_value();
+            if (!a_serde->WriteRecordData(&has_opt, sizeof(has_opt))) return false;
+            if (has_opt 
+                && !serialization::SaveNiPoint3(a_serde, _backhug_data.value().markerTarget)
+                && !serialization::SaveNiPoint3(a_serde, _backhug_data.value().markerRot)
+                && !a_serde->WriteRecordData(&_backhug_data.value().AngleZ_raw, sizeof(_backhug_data.value().AngleZ_raw)))
                 return false;
 
+            // SL hook name
+            has_opt = _sl_hook_data.has_value();
+            if (!a_serde->WriteRecordData(&has_opt, sizeof(has_opt))) return false;
+            if (has_opt
+                && !serialization::SaveString(a_serde, _sl_hook_data.value()._sl_hook_postfix)
+                && !serialization::SaveString(a_serde, _sl_hook_data.value()._sl_hook_end_name))
+                return false;
+
+            // Actor Form id
             RE::FormID formId = 0;
             auto actorPtr = _npc1_handle.get();
             if (actorPtr) {
@@ -65,8 +85,38 @@ namespace event_chain {
             int32_t read_bytes = 0;
             uint32_t current_read = 0;
 
+            // base class
             read_bytes = delayed::deserialize(a_serde);
             if (read_bytes < 0) return -1;
+
+            // backhug data
+            uint8_t has_opt;
+            _backhug_data.reset();  // shouldn't be necessary, because, when loading the game, the _events vector is created from scratch
+            current_read = a_serde->ReadRecordData(&has_opt, sizeof(has_opt));
+            if (current_read != sizeof(has_opt)) return -1; else read_bytes += current_read;
+            if (has_opt) {
+                animation::backhug::backhug_data data;
+                current_read = serialization::LoadNiPoint3(a_serde, data.markerTarget);
+                if (current_read < 0) return -1; else read_bytes += current_read; // current_read isn't necessarily = sizeof(NiPoint3)
+                current_read = serialization::LoadNiPoint3(a_serde, data.markerRot);
+                if (current_read < 0) return -1; else read_bytes += current_read;
+                current_read = a_serde->ReadRecordData(&data.AngleZ_raw, sizeof(data.AngleZ_raw));
+                if (current_read != sizeof(data.AngleZ_raw)) return -1; else read_bytes += current_read;
+                _backhug_data = data;
+            }
+
+            // SL hook name
+            _sl_hook_data.reset();
+            current_read = a_serde->ReadRecordData(&has_opt, sizeof(has_opt));
+            if (current_read != sizeof(has_opt)) return -1; else read_bytes += current_read;
+            if (has_opt) {
+                sl_scenes::sl_scene_hook_names data;
+                current_read = serialization::LoadString(a_serde, data._sl_hook_postfix);
+                if (current_read < 0) return -1; else read_bytes += current_read;
+                current_read = serialization::LoadString(a_serde, data._sl_hook_end_name);
+                if (current_read < 0) return -1; else read_bytes += current_read;
+                _sl_hook_data = data;
+            }
 
             RE::FormID savedFormID = 0;     // Lot of boiler-plate code for serializing actor handles
             current_read = a_serde->ReadRecordData(&savedFormID, sizeof(savedFormID));

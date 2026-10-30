@@ -9,8 +9,6 @@ namespace fsm {
 	struct state_serve_scene_parameters {
 		float _timeout_p = 0.f;
 		float _handle = 0.f;
-		//std::vector<RE::Actor*> _actors;
-		//std::vector<RE::Actor*> _submissives;
 
 		std::pair < uint32_t, std::function<std::optional<fsm_state>(game::context& ctx)>> on_timeout;
 		std::pair < uint32_t, std::function<std::pair<bool, std::optional<fsm_state>>(game::context& ctx, RE::TESQuest* a_this, float a_handle)>> on_serve;
