@@ -68,6 +68,7 @@ set(sources ${sources}
     src/state_serve_scene_parameters.cpp
     src/stat_manager.cpp
     src/serialization.cpp
+    src/equip_hook.cpp
     src/snippets.cpp
 )
 

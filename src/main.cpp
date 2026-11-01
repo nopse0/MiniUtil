@@ -8,7 +8,36 @@
 #include "sl_scenes.h"
 #include "random.h"
 #include "events.h"
+#include "equip_hook.h"
+#include "skyrim_util.h"
 #include "spdlog/sinks/sink.h"
+
+// Clean start, don't load data from save game (this is only guaranteed to work, if the player was in the idle state, when saving the game, otherwise
+// ai packages may already have been assigned to npcs, which are not removed, if starting in the idle state) 
+bool ModReset = false;
+// Player cannot use objects, it didn't craft itself
+bool SelfMadeEquipOnly = false;
+// Reset all skills to 1
+bool ResetSkills = false;
+
+class RaceSexMenuCloseHook : public RE::BSTEventSink<RE::MenuOpenCloseEvent>, public singleton<RaceSexMenuCloseHook>
+{
+public:
+	// Das Event wird gefeuert, wenn ein Menü geöffnet oder geschlossen wird
+	virtual RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>* a_source) override
+	{
+		// Wir suchen nach dem "RaceSexMenu" und prüfen, ob es GESCHLOSSEN wird (a_event->opening ist false)
+		if (a_event && a_event->menuName == RE::RaceSexMenu::MENU_NAME && !a_event->opening) {
+			skyrim_util::reset_skills();
+			if (a_source) {
+				a_source->RemoveEventSink(this);
+				logger::info("RaceSexMenuCloseHook hook removed");
+			}
+			logger::info("RaceSexMenuCloseHook reset all skills to 1");
+		}
+		return RE::BSEventNotifyControl::kContinue;
+	}
+};
 
 namespace main_loop {
 	void install();
@@ -70,11 +99,6 @@ bool __stdcall on_input_minigame(RE::InputEvent* a_event) {
 	return minigame::struggle_game::get_instance().on_input(a_event);
 }
 
-	//static events::settings _settings;
-	//if (ImGuiMCP::InputDouble("base_chance", &_settings.base_chance_global)) {	
-	//}
-
-
 void InitializeMCP() {
 	if (!SKSEMenuFramework::IsInstalled()) {
 		return;
@@ -126,14 +150,13 @@ void InitializeForms() {
 	form_cache::SLAArousalFaction = dataHandler->LookupForm<RE::TESFaction>(0x0003FC36, sexLabAroused);
 }
 
-void InitializeSerialization()
+void InitializeSerialization(bool a_reset)
 {
 	// Deine internen Subtypes (als 4-Byte-Integers deklariert)
 	enum class module_id_t : std::uint32_t {
 		RandomGenerator = 'RNDM',
 		Controller = 'CTRL',
 	};
-
 
 	auto serialization = SKSE::GetSerializationInterface();
 	if (!serialization) {
@@ -148,13 +171,13 @@ void InitializeSerialization()
 			return;
 		logger::debug("SKSE::RevertCallback");
 		random::random::get_instance().reset();
-		// sl_scenes::sl_scene::get_instance().revert();  // managed by controller
 		controller::controller::get_instance().revert();
 	});
 
 	serialization->SetSaveCallback([](SKSE::SerializationInterface* a_serde) {
 		if (ModDisabled)
 			return;
+
 		logger::debug("SKSE::SaveCallback");
 		if (!a_serde->OpenRecord('MMST', 1)) {
 			logger::error("Konnte Haupt-Record nicht öffnen!");
@@ -170,79 +193,83 @@ void InitializeSerialization()
 		controller::controller::get_instance().serialize(a_serde);
 	});
 
-	serialization->SetLoadCallback([](SKSE::SerializationInterface* a_serde) {
-		if (ModDisabled)
-			return;
+	if (a_reset) {
+		logger::info("Clean start, save game data ignored");
+	} else {
+		serialization->SetLoadCallback([](SKSE::SerializationInterface* a_serde) {
+			if (ModDisabled)
+				return;
 
-		// assertion test
-		//release_assert(a_serde == nullptr);
+			// assertion test
+			//release_assert(a_serde == nullptr);
 
-		//std::thread t1
-		//{
-		//	[] {
-		//      // Breakpoint here, to examine spdlog initialization
-		//		LoggingTest();
-		//	}
-		//};
-		//t1.join();
-	
-		std::uint32_t type;
-		std::uint32_t version;
-		std::uint32_t length;
+			//std::thread t1
+			//{
+			//	[] {
+			//      // Breakpoint here, to examine spdlog initialization
+			//		LoggingTest();
+			//	}
+			//};
+			//t1.join();
 
-		logger::debug("SKSE::LoadCallback");
-		// SKSE sucht nach unserem Haupt-Eintrag
-		while (a_serde->GetNextRecordInfo(type, version, length)) {
-			if (type == 'MMST' && version == 1) {
-				logger::debug("Found record info of type 'MMST', length = {}", length);
+			std::uint32_t type;
+			std::uint32_t version;
+			std::uint32_t length;
 
-				std::uint32_t bytesRead = 0;
+			logger::debug("SKSE::LoadCallback");
+			// SKSE sucht nach unserem Haupt-Eintrag
+			while (a_serde->GetNextRecordInfo(type, version, length)) {
+				if (type == 'MMST' && version == 1) {
+					logger::debug("Found record info of type 'MMST', length = {}", length);
 
-				bool randomGeneratorRead = false;
-				bool controllerRead = false;
+					std::uint32_t bytesRead = 0;
 
-				// Schleife läuft, solange wir noch nicht die gesamte 'length' des Records gelesen haben
-				while (bytesRead < length) {
-					std::uint32_t subTypeRaw = 0;
-					if (!a_serde->ReadRecordData(&subTypeRaw, sizeof(subTypeRaw))) {
-						break; // Fehler oder Ende des Records erreicht
+					bool randomGeneratorRead = false;
+					bool controllerRead = false;
+
+					// Schleife läuft, solange wir noch nicht die gesamte 'length' des Records gelesen haben
+					while (bytesRead < length) {
+						std::uint32_t subTypeRaw = 0;
+						if (!a_serde->ReadRecordData(&subTypeRaw, sizeof(subTypeRaw))) {
+							break; // Fehler oder Ende des Records erreicht
+						}
+						bytesRead += sizeof(subTypeRaw);
+
+						module_id_t currentSub = static_cast<module_id_t>(subTypeRaw);
+
+						switch (currentSub) {
+						case module_id_t::RandomGenerator:
+							if (randomGeneratorRead) {
+								logger::error("Save game contains multiple RandomGenerator records!");
+							}
+							bytesRead += random::random::get_instance().deserialize(a_serde);
+							randomGeneratorRead = true;
+							break;
+
+						case module_id_t::Controller:
+							if (controllerRead) {
+								logger::error("Save game contains multiple Controller records!");
+							}
+							bytesRead += controller::controller::get_instance().deserialize(a_serde);
+							controllerRead = true;
+							break;
+
+						default:
+							logger::error("Unbekannter Subtype im MMST-Record gefunden!  bytesRead={},  randomGeneratorRead={}, controllerRead={}",
+								bytesRead, randomGeneratorRead, controllerRead);
+							return;
+						}
 					}
-					bytesRead += sizeof(subTypeRaw);
-
-					module_id_t currentSub = static_cast<module_id_t>(subTypeRaw);
-
-					switch (currentSub) {
-					case module_id_t::RandomGenerator:
-						if (randomGeneratorRead) {
-							logger::error("Save game contains multiple RandomGenerator records!");
-						}
-						bytesRead += random::random::get_instance().deserialize(a_serde);
-						randomGeneratorRead = true;
-						break;
-
-					case module_id_t::Controller:
-						if (controllerRead) {
-							logger::error("Save game contains multiple Controller records!");
-						}
-						bytesRead += controller::controller::get_instance().deserialize(a_serde);
-						controllerRead = true;
-						break;
-
-					default:
-						logger::error("Unbekannter Subtype im MMST-Record gefunden!  bytesRead={},  randomGeneratorRead={}, controllerRead={}",
+					if (bytesRead != length || randomGeneratorRead == false || controllerRead == false) {
+						logger::error("Save game corruption! bytesRead={},  randomGeneratorRead={}, controllerRead={}",
 							bytesRead, randomGeneratorRead, controllerRead);
-						return;
 					}
+					logger::info("Record 'MMST' read from save game.");
 				}
-				if (bytesRead != length || randomGeneratorRead == false || controllerRead == false) {
-					logger::error("Save game corruption! bytesRead={},  randomGeneratorRead={}, controllerRead={}", 
-						bytesRead, randomGeneratorRead, controllerRead);
-				}
-				logger::info("Record 'MMST' read from save game.");
 			}
-		}
 
-		});
+			});
+	}
 }
 
 void RegisterForModEvents() {
@@ -257,39 +284,46 @@ void RegisterForModEvents() {
 	}
 }
 
-
 // 3. Der Message Listener
 void OnSKSEMessage(SKSE::MessagingInterface::Message* a_msg)
 {
 	switch (a_msg->type) {
 	case SKSE::MessagingInterface::kPostLoad:   // after plugin (.dll) has been loaded
-		InitializeSerialization();
+		InitializeSerialization(ModReset);
 		RegisterForModEvents();
 		break;
 
 	case SKSE::MessagingInterface::kDataLoaded: // after all esm/esp/etc. have been loaded
 		InitializeForms();
-		main_loop::install();
 		actor_util::internal::initialize();
+		main_loop::install();
+		if (SelfMadeEquipOnly) {
+			equip::equip_event_listener::Register();
+			logger::info("Installed equip_event_listener");
+		}
 		break;
 
-	case SKSE::MessagingInterface::kNewGame:
+	case SKSE::MessagingInterface::kNewGame: {
 		random::random::get_instance().new_game();
 		RegisterForModEvents();
+		auto ui = RE::UI::GetSingleton();
+		if (ui && ResetSkills) {
+			ui->GetEventSource<RE::MenuOpenCloseEvent>()->AddEventSink(&RaceSexMenuCloseHook::get_instance());
+			logger::info("RaceSexMenuCloseHook hook installed");
+		}}
+		break;
+	case SKSE::MessagingInterface::kPreLoadGame: {
+		auto ui = RE::UI::GetSingleton();
+		if (ui) {
+			ui->GetEventSource<RE::MenuOpenCloseEvent>()->RemoveEventSink(&RaceSexMenuCloseHook::get_instance());
+			logger::info("RaceSexMenuCloseHook remove hook called");
+		}}
 		break;
 	}
 }
 
-// Der SKSE Einstiegspunkt
-extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface* a_skse) {
-	SKSE::Init(a_skse, SKSE::InitInfo{.logRotate=1});
-
-	//===========================================================================
-
-	const char* const ini_name = "data/skse/plugins/MiniUtil.ini";
-	CSimpleIniA ini;
-	SI_Error err = ini.LoadFile(ini_name);
-
+void InitializeLogging(std::optional<CSimpleIniA*> a_ini)
+{
 	event_chain::logger_custom::init_logger();
 	fsm::logger_custom::init_logger();
 	animation::logger_custom::init_logger();
@@ -299,7 +333,8 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
 	spdlog::level::level_enum global_level = spdlog::level::info;
 	std::string cfg_string = "";
 
-	if (err == SI_OK) {
+	if (a_ini.has_value()) {
+		CSimpleIniA& ini = *a_ini.value();
 		const char* global_level_str = ini.GetValue("Config", "LogLevel", "info");
 		logger::info("global_level_str = {}", global_level_str);
 		cfg_string = global_level_str;
@@ -325,7 +360,7 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
 		}
 	}
 	else {
-		logger::info("Could not read config file {}", ini_name);
+		logger::info("InitializeLogging no ini, using defaults");
 		cfg_string = "info"; // Fallback
 
 		// Fallback-Pattern für den Fehlerfall
@@ -338,7 +373,7 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
 
 	// 3. Magierunde: spdlog konfigurieren!
 	// Übergibt z.B.: "info,event_chain=debug,network=err"
-	logger::info("cfg_string = {}", cfg_string);
+	logger::info("InitializeLogging cfg_string = {}", cfg_string);
 	spdlog::cfg::helpers::load_levels(cfg_string);
 
 	event_chain::logger_custom::debug("event_chain::logger_custom");
@@ -346,22 +381,27 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
 	animation::logger_custom::debug("animation::logger_custom");
 	controller::logger_custom::debug("controller::logger_custom");
 	scanner::logger_custom::debug("scanner::logger_custom");
+}
 
-	/*LoggingTest("custom");
-	//logger_test::debug("Custom logger test #1");
 
-	auto logger = spdlog::get("custom");
-	if (logger) {
-		logger::info("custom logger is defined");
-		//logger->set_level(spdlog::level::trace);
-		//logger->set_formatter(std::make_unique<spdlog::pattern_formatter>("[%T.%f] [%=5t] [%n] [%L] [%s:%# %!] %v"));
+// Der SKSE Einstiegspunkt
+extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface* a_skse) {
+	SKSE::Init(a_skse, SKSE::InitInfo{.logRotate=1});
+
+	const char* const ini_name = "data/skse/plugins/MiniUtil.ini";
+	CSimpleIniA ini;
+	SI_Error err = ini.LoadFile(ini_name);
+	if (err == SI_OK) {
+		InitializeLogging(&ini);
+		ModReset = ini.GetLongValue("Config", "ModReset", 0);
+		logger::info("ModReset = {}", ModReset);
+		ResetSkills = ini.GetLongValue("Config", "ResetSkills", 0);
+		logger::info("ResetSkills = {}", ResetSkills);
+		SelfMadeEquipOnly = ini.GetLongValue("Config", "SelfMadeEquipOnly", 0);
+		logger::info("SelfMadeEquipOnly = {}", SelfMadeEquipOnly);
 	}
 	else
-		logger::info("custom logger is undefined");
-	
-	logger->debug("Custom logger test #2");*/
-
-	//===============================================================================
+		InitializeLogging(std::nullopt);
 
 	auto* messaging = SKSE::GetMessagingInterface();
 	if (messaging) {
@@ -375,8 +415,8 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
 		papyrus->Register(RegisterPapyrusFunctions);
 	}
 
+	// Memory for hooks
+	SKSE::AllocTrampoline(1400);
+
 	return true;
 }
-
-
-

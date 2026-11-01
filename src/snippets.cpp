@@ -1,4 +1,5 @@
 #include "RE/Skyrim.h"
+#include "snippets.h"
 
 bool IsActorInAnyQuestAlias(RE::Actor* a_actor)
 {
@@ -160,3 +161,5 @@ void ForceActorToQuestAlias(RE::TESQuest* a_quest, uint32_t a_aliasID, RE::Actor
         }
     }
 }
+
+

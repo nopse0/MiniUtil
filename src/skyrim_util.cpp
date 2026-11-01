@@ -2,6 +2,27 @@
 
 namespace skyrim_util {
 
+     void reset_skills() {
+        auto player = RE::PlayerCharacter::GetSingleton();
+        if (player) {
+            std::vector<RE::ActorValue> skills = {
+                RE::ActorValue::kOneHanded, RE::ActorValue::kTwoHanded, RE::ActorValue::kArchery,
+                RE::ActorValue::kHeavyArmor, RE::ActorValue::kBlock, RE::ActorValue::kSmithing,
+                RE::ActorValue::kAlteration, RE::ActorValue::kConjuration, RE::ActorValue::kDestruction,
+                RE::ActorValue::kIllusion, RE::ActorValue::kRestoration, RE::ActorValue::kEnchanting,
+                RE::ActorValue::kLightArmor, RE::ActorValue::kSneak, RE::ActorValue::kLockpicking,
+                RE::ActorValue::kPickpocket, RE::ActorValue::kSpeech, RE::ActorValue::kAlchemy
+            };
+            //auto avOwner = static_cast<RE::ActorValueOwner*>(player);
+			auto avOwner = player->AsActorValueOwner();
+            for (auto av : skills) {
+                logger::info("avOwner = {}, av = {}", (void*)avOwner, av);
+                avOwner->SetBaseActorValue(av, 1.0f);
+                avOwner->SetActorValue(av, 1.0f);
+            }
+        }
+    }
+
     bool is_playing()
     {
         auto ui = RE::UI::GetSingleton();

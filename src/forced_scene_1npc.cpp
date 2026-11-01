@@ -226,6 +226,12 @@ namespace event_chain {
         std::optional<fsm::fsm_state> forced_scene_1npc::wait_dialog_finished_success_cb(game::context& ctx, RE::Actor* a_speaker) {
             logger_custom::debug("state_sleep::trigger_phase2 dialog finished callback force greet dialog done");
 
+    //        if (ResetSkills) { // this was a test
+    //            ResetSkills = false;
+    //            skyrim_util::reset_skills();
+	//            return wait_dialog_finished_timeout_cb(ctx);
+    //        }
+
             release_assert(form_cache::MiniMolestForceGreetType != nullptr);
             release_assert(form_cache::MiniMolestForceGreetOutcome != nullptr);
             auto outcome = form_cache::MiniMolestForceGreetOutcome->value;

@@ -62,7 +62,6 @@ namespace main_loop {
     };
 
     void install() {
-        SKSE::AllocTrampoline(14);
         main_update_hook::hook();
     }
 
