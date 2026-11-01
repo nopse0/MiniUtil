@@ -1,44 +1,51 @@
 #include "equip_hook.h"
 
 namespace equip {
-#if 0
-	bool PlayerCanCraftAmmo(RE::TESBoundObject* a_ammo)
-	{
-		RE::BGSConstructibleObject x;
 
-		if (!a_ammo || !a_ammo->IsAmmo()) return false;
+	// Check via NEIF didn't work (I don't understand this), so we check via TESDataHandler instead
+	bool IsSurvivalModItem_ViaDataHandler(RE::TESForm* a_form)
+	{
+		if (!a_form) return false;
 
 		auto* dataHandler = RE::TESDataHandler::GetSingleton();
 		if (!dataHandler) return false;
 
-		auto* player = RE::PlayerCharacter::GetSingleton();
+		// 1. Extrahiere den Mod-Index aus der FormID (oberstes Byte)
+		// Bei einer ID wie 0x1204103d schiebt das den Wert um 24 Bits nach rechts -> 0x12
+		uint8_t modIndex = static_cast<uint8_t>((a_form->formID & 0xFF000000) >> 24);
 
-		// Wir durchsuchen alle Rezepte (Constructible Objects) im Spiel
-		const auto& recipes = dataHandler->GetFormArray<RE::BGSConstructibleObject>();
-		for (auto* recipe : recipes) {
-			if (!recipe || !recipe->createdItem) continue;
+		// 2. Spezialfall: Dynamische Laufzeit-Objekte (z.B. In-Game geschmiedet) beginnen mit 0xFF
+		if (modIndex == 0xFF) return false;
 
-			// Findet das Rezept, das diese spezifische Munition herstellt
-			if (recipe->createdItem == a_ammo) {
+		// 3. Spezialfall: Light-Plugins (FE:XXX). Falls Campfire/Hunterborn als ESL laufen würden:
+		if (modIndex == 0xFE) {
+			// Bei ESLs sind die nächsten 12 Bits (Bits 12-23) der Light-Mod-Index
+			uint16_t lightModIndex = static_cast<uint16_t>((a_form->formID & 0x00FFF000) >> 12);
 
-				// Wenn das Rezept keine Bedingungen hat, darf es jeder herstellen
-				if (!recipe->conditions.head) {
-					return true;
-				}
+			// Prüfe, ob dieser Index zu Campfire oder Hunterborn gehört
+			auto campfireIndex = dataHandler->GetLoadedLightModIndex("Campfire.esm");
+			if (campfireIndex && *campfireIndex == lightModIndex) return true;
 
-				// Wir lassen die Engine die originalen Bedingungen des Rezepts 
-				// direkt gegen den Spieler-Charakter prüfen (Perks, Level, etc.)
-				// Parameter: a_actionRef (Player), a_targetRef (Player)
-				if (recipe->conditions.IsTrue(player, player)) {
-					return true; // Der Spieler erfüllt alle Schmiede-Voraussetzungen!
-				}
-			}
+			auto hunterbornIndex = dataHandler->GetLoadedLightModIndex("Hunterborn.esp");
+			if (hunterbornIndex && *hunterbornIndex == lightModIndex) return true;
+
+			return false;
 		}
 
-		// Wenn kein Rezept existiert (z.B. für einzigartige Pfeile) oder Bedingungen nicht erfüllt sind
+		// 4. Standardfall für normale ESM/ESP (wie deine 0x12):
+		// Hole die Indizes, an denen Campfire und Hunterborn in DIESEM Savegame geladen sind
+		auto campfireIndex = dataHandler->GetLoadedModIndex("Campfire.esm");
+		if (campfireIndex && *campfireIndex == modIndex) {
+			return true;
+		}
+
+		auto hunterbornIndex = dataHandler->GetLoadedModIndex("Hunterborn.esp");
+		if (hunterbornIndex && *hunterbornIndex == modIndex) {
+			return true;
+		}
+
 		return false;
 	}
-#endif
 
 	bool PlayerCanCraftAmmo(RE::TESBoundObject* a_ammo)
 	{
@@ -198,6 +205,13 @@ namespace equip {
 								}
 							}
 						}
+					}
+					
+					// Check for Campfire or Hunterborn items based on Editor ID
+					logger::info("Checking for Campfire or Hunterborn item");
+					if (IsSurvivalModItem_ViaDataHandler(boundObj)) {
+						logger::info("Detected Campfire or Hunterborn item");
+						isAllowed = true;
 					}
 					
 					break; // was item == boundObj, can stop loop
