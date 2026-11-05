@@ -78,7 +78,12 @@ namespace event_chain {
             if (actorPtr) {
                 formId = actorPtr->GetFormID();
             }
-            return a_serde->WriteRecordData(&formId, sizeof(formId));
+            if (!a_serde->WriteRecordData(&formId, sizeof(formId))) return false;
+
+            uint8_t set_away = _set_away;
+            if (!a_serde->WriteRecordData(&set_away, sizeof(set_away))) return false;
+            
+            return true;    
         }
 
         int32_t forced_scene_1npc::deserialize(SKSE::SerializationInterface* a_serde) {
@@ -134,6 +139,12 @@ namespace event_chain {
                     }
                 }
             }
+ 
+            uint8_t set_away;
+            current_read = a_serde->ReadRecordData(&set_away, sizeof(set_away));
+            if (current_read != sizeof(set_away)) return -1; else read_bytes += current_read;
+            _set_away = set_away;
+            
             return read_bytes;
         }
 
@@ -156,8 +167,8 @@ namespace event_chain {
                     RE::Actor* actor = males[0].second;
                     if (!skyrim_util::is_valid_for_event(actor))
                         return false;
-                    //auto roll = ctx._rng.gen_float(0.f, 1.f);
-                    auto roll = -1.f; // always trigger for testing
+                    auto roll = ctx._rng.gen_float(0.f, 1.f);
+                    //auto roll = -1.f; // always trigger for testing
                     auto arousal = stats::stat_manager::get_actor_arousal(actor);
                     logger_custom::debug("forced_scene_1npc::trigger_phase1 roll={}, arousal={}, trigger => {}", roll, arousal, roll <= arousal);
                     if (roll > arousal) {
@@ -180,6 +191,11 @@ namespace event_chain {
                 return std::nullopt;
             }
             auto actor = aptr.get();
+
+            if (Frontier1) {
+                _set_away = Frontier1->SetAway(actor->GetFormID(), true, "MiniUtil.dll");
+                logger_custom::debug("forced_scene_1npc::trigger_phase2 SetAway result={}", _set_away);
+            }
 
             logger_custom::debug("forced_scene_1npc::trigger_phase2 initializing force greet");
 
@@ -206,6 +222,18 @@ namespace event_chain {
             );
         }
 
+        void forced_scene_1npc::reset_npc1_handle() {
+            if (_set_away && Frontier1) {
+                _set_away = false;
+                auto aptr = _npc1_handle.get();
+                if (aptr) {
+                    auto result = Frontier1->SetAway(aptr->GetFormID(), false, "MiniUtil.dll");
+                    logger_custom::debug("forced_scene_1npc::reset_npc1_handle SetAway result={}", result);
+                }
+            }
+            _npc1_handle = RE::ActorHandle();
+        }
+
         std::optional<fsm::fsm_state> forced_scene_1npc::wait_dialog_finished_timeout_cb(game::context& ctx) {
             logger_custom::debug("forced_scene_1npc::wait_dialog_finished_timeout_cb force greet timed out");
             release_assert(form_cache::MiniMolestForceGreetType != nullptr);
@@ -218,19 +246,13 @@ namespace event_chain {
                 actor_util::remove_package_override(actor, form_cache::MiniMolestForceGreetPackage);
                 actor->EvaluatePackage(true, false);
             }
-            _npc1_handle = RE::ActorHandle();
+            reset_npc1_handle();
             set_retry_cooldown(ctx);
             return fsm::state_idle{};
         }
 
         std::optional<fsm::fsm_state> forced_scene_1npc::wait_dialog_finished_success_cb(game::context& ctx, RE::Actor* a_speaker) {
             logger_custom::debug("state_sleep::trigger_phase2 dialog finished callback force greet dialog done");
-
-    //        if (ResetSkills) { // this was a test
-    //            ResetSkills = false;
-    //            skyrim_util::reset_skills();
-	//            return wait_dialog_finished_timeout_cb(ctx);
-    //        }
 
             release_assert(form_cache::MiniMolestForceGreetType != nullptr);
             release_assert(form_cache::MiniMolestForceGreetOutcome != nullptr);
@@ -243,7 +265,7 @@ namespace event_chain {
                     auto actor = actorPtr.get();
                     actor_util::remove_package_override(actor, form_cache::MiniMolestForceGreetPackage);
                     actor->EvaluatePackage(true, false);
-                    _npc1_handle = RE::ActorHandle();
+                    reset_npc1_handle();
                 }
                 set_retry_cooldown(ctx);
                 return fsm::state_idle{};
@@ -310,7 +332,7 @@ namespace event_chain {
             release_assert(struggle_state != minigame::struggle_game::state::idle);  // something wrong, this shouldn't be possible
             if (struggle_state != minigame::struggle_game::state::lost) {
                 // Successfully struggled free, TODO: update statistics
-                _npc1_handle = RE::ActorHandle();
+                reset_npc1_handle();
                 set_regular_cooldown(ctx);
                 return fsm::state_idle{};
             }
@@ -343,14 +365,14 @@ namespace event_chain {
         }
 
         std::optional<fsm::fsm_state>  forced_scene_1npc::scene_error_return(game::context& ctx) {
-            _npc1_handle = RE::ActorHandle();
+            reset_npc1_handle();
             _sl_hook_data.reset();
             set_retry_cooldown(ctx);
             return fsm::state_idle{};
         }
 
         std::optional<fsm::fsm_state>  forced_scene_1npc::scene_error_return_xl(game::context& ctx) {
-            _npc1_handle = RE::ActorHandle();
+            reset_npc1_handle();
             _sl_hook_data.reset();
             set_retry_cooldown_xl(ctx, ctx._settings._scene_duration_max_seconds);
             return fsm::state_idle{};
@@ -462,7 +484,7 @@ namespace event_chain {
         }
 
         std::optional<fsm::fsm_state> forced_scene_1npc::wait_for_mod_event_timeout_cb(game::context& ctx) {
-            _npc1_handle = RE::ActorHandle();
+            reset_npc1_handle();
             set_retry_cooldown_xl(ctx, ctx._settings._scene_duration_max_seconds);
             return fsm::state_idle{};
         }
@@ -470,7 +492,7 @@ namespace event_chain {
         std::optional<fsm::fsm_state> forced_scene_1npc::wait_for_mod_event_received_cb(game::context& ctx) {
             logger_custom::debug("fsm::state_wait_for_mod_event event received");
             // TODO: Update statistics
-            _npc1_handle = RE::ActorHandle();
+            reset_npc1_handle();
             set_regular_cooldown(ctx);
             return fsm::state_idle{};
         }

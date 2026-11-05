@@ -288,9 +288,12 @@ void RegisterForModEvents() {
 void OnSKSEMessage(SKSE::MessagingInterface::Message* a_msg)
 {
 	switch (a_msg->type) {
-	case SKSE::MessagingInterface::kPostLoad:   // after plugin (.dll) has been loaded
+	case SKSE::MessagingInterface::kPostLoad: { // after plugin (.dll) has been loaded
 		InitializeSerialization(ModReset);
 		RegisterForModEvents();
+		Frontier1 = FrontierAPI::Get();
+		logger::info("Frontier1 = {}", (Frontier1 ? "available" : "not available"));
+	}
 		break;
 
 	case SKSE::MessagingInterface::kDataLoaded: // after all esm/esp/etc. have been loaded

@@ -36,6 +36,7 @@ namespace event_chain {
             RE::ActorHandle _npc1_handle;
             std::optional<animation::backhug::backhug_data> _backhug_data;
             std::optional<sl_scenes::sl_scene_hook_names> _sl_hook_data;
+			bool _set_away = false;
 
             bool trigger_phase1(game::context& ctx);
             std::optional<fsm::fsm_state> trigger_phase2(game::context& ctx);
@@ -43,6 +44,7 @@ namespace event_chain {
             bool serialize(SKSE::SerializationInterface* a_serde, float a_current_time);
             int32_t deserialize(SKSE::SerializationInterface* a_serde);
 
+            void reset_npc1_handle();
             std::optional<fsm::fsm_state>  scene_error_return(game::context& ctx);
             std::optional<fsm::fsm_state>  scene_error_return_xl(game::context& ctx);
 

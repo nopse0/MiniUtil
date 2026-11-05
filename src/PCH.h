@@ -5,11 +5,17 @@
 #include <SimpleIni.h>
 #include <SKSEMenuFramework.h>
 #include <spdlog/pattern_formatter.h>
+#ifndef _Windows_
+	#define _Windows_
+#endif
+#include "FrontierAPI.h"
 
 using namespace std::string_view_literals;
 
 // Set on fatal errors, e.g. if I can't load my Forms from the .esp
 inline bool ModDisabled = false;
+
+inline FrontierAPI::IFrontier1* Frontier1 = nullptr;
 
 #define MINIUTILS_MAKE_DEFAULT_LOGGER(a_func, a_level_val)                                              \
                                                                                       \
