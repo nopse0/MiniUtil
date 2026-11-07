@@ -29,6 +29,10 @@ namespace equip {
 			auto hunterbornIndex = dataHandler->GetLoadedLightModIndex("Hunterborn.esp");
 			if (hunterbornIndex && *hunterbornIndex == lightModIndex) return true;
 
+			// Also allow cc fishing (fishing rod)
+			auto fishingIndex = dataHandler->GetLoadedLightModIndex("ccBGSSSE001-Fish.esm");
+			if (fishingIndex && *fishingIndex == lightModIndex) return true;
+
 			return false;
 		}
 
@@ -43,6 +47,27 @@ namespace equip {
 		if (hunterbornIndex && *hunterbornIndex == modIndex) {
 			return true;
 		}
+
+		// Also allow cc fishing (fishing rod)
+		auto fishingIndex = dataHandler->GetLoadedModIndex("ccBGSSSE001-Fish.esm");
+		if (fishingIndex && *fishingIndex == modIndex) return true;
+
+		// DD Devices (device is equipped two times, first the inventory item, and second the rendered item, both checks must pass)
+		auto ddIndex = dataHandler->GetLoadedModIndex("Devious Devices - Assets.esm");
+		logger::info("IsSurvivalModItem_ViaDataHandler ddIndex = {}, modIndex = {}", ddIndex.has_value() ? ddIndex.value() : 0, modIndex);
+		if (ddIndex && *ddIndex == modIndex) return true;
+
+		ddIndex = dataHandler->GetLoadedModIndex("Devious Devices - Integration.esm");
+		logger::info("IsSurvivalModItem_ViaDataHandler ddIndex = {}, modIndex = {}", ddIndex.has_value() ? ddIndex.value() : 0, modIndex);
+		if (ddIndex && *ddIndex == modIndex) return true;
+
+		ddIndex = dataHandler->GetLoadedModIndex("Devious Devices - Expansion.esm");
+		logger::info("IsSurvivalModItem_ViaDataHandler ddIndex = {}, modIndex = {}", ddIndex.has_value() ? ddIndex.value() : 0, modIndex);
+		if (ddIndex && *ddIndex == modIndex) return true;
+
+		ddIndex = dataHandler->GetLoadedModIndex("Devious Devices - Contraptions.esm");
+		logger::info("IsSurvivalModItem_ViaDataHandler ddIndex = {}, modIndex = {}", ddIndex.has_value() ? ddIndex.value() : 0, modIndex);
+		if (ddIndex && *ddIndex == modIndex) return true;
 
 		return false;
 	}

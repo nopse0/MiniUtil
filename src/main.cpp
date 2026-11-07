@@ -10,6 +10,7 @@
 #include "events.h"
 #include "equip_hook.h"
 #include "skyrim_util.h"
+#include "console.h"
 #include "spdlog/sinks/sink.h"
 
 // Clean start, don't load data from save game (this is only guaranteed to work, if the player was in the idle state, when saving the game, otherwise
@@ -300,6 +301,7 @@ void OnSKSEMessage(SKSE::MessagingInterface::Message* a_msg)
 		InitializeForms();
 		actor_util::internal::initialize();
 		main_loop::install();
+		console::RegisterFreezeTimeCommand();
 		if (SelfMadeEquipOnly) {
 			equip::equip_event_listener::Register();
 			logger::info("Installed equip_event_listener");

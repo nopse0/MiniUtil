@@ -69,6 +69,7 @@ set(sources ${sources}
     src/stat_manager.cpp
     src/serialization.cpp
     src/equip_hook.cpp
+    src/console.cpp
     src/snippets.cpp
 )
 

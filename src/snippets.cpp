@@ -163,3 +163,21 @@ void ForceActorToQuestAlias(RE::TESQuest* a_quest, uint32_t a_aliasID, RE::Actor
 }
 
 
+void ReducePlayerExposure(float a_amount)
+{
+    // Hole den VM-Singleton
+    auto vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+    if (!vm) return;
+
+    //auto args = RE::MakeFunctionArguments(std::move(a_amount));
+    //if (!args) return;
+    std::unique_ptr<RE::BSScript::IFunctionArguments> args(RE::MakeFunctionArguments(std::forward<float>(a_amount), -1.f));
+    if (!args) return;
+
+    RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callbackPtr;
+
+    // Der sichere Aufruf an die Papyrus-VM
+    vm->DispatchStaticCall("FrostUtil", "ModPlayerExposure", args.get(), callbackPtr);
+
+	// delete args;  // Is this neccessary ? Yes, I think so (at least, if not using unique_ptr)
+}

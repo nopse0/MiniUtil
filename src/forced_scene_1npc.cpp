@@ -12,6 +12,7 @@
 #include "fsm_loader.h"
 #include "papyrus_utils.h"
 #include "serialization.h"
+#include "snippets.h"
 
 namespace event_chain {
 
@@ -338,7 +339,7 @@ namespace event_chain {
             }
 
             _sl_hook_data = ctx._scene_starter.create_hook_names();
-            auto handle = ctx._rng.gen_float(1.f, 10000000.f);
+            auto handle = (float)_sl_hook_data.value()._sl_hook_id; //ctx._rng.gen_float(1.f, 10000000.f);
 
             SKSE::ModCallbackEvent modEvent;
             modEvent.eventName = RE::BSFixedString("MiniUtilStartScene");
@@ -384,6 +385,9 @@ namespace event_chain {
         }
 
         std::pair<bool, std::optional<fsm::fsm_state>> forced_scene_1npc::serve_scene_parameters_serve_cb(game::context& ctx, RE::TESQuest* a_this, float a_handle) {
+            if (!_sl_hook_data.has_value() || _sl_hook_data.value()._sl_hook_id != a_handle)  // invalid handle    
+                return std::make_pair(false, scene_error_return(ctx));
+            
             auto vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
             release_assert(vm != nullptr);
             auto policy = vm->GetObjectHandlePolicy();
@@ -458,13 +462,19 @@ namespace event_chain {
         }
 
         std::optional<fsm::fsm_state> forced_scene_1npc::set_scene_thread_id_timeout_cb(game::context& ctx) {
-            logger_custom::debug("fsm::state_set_scene_parameters timed out");
+            logger_custom::debug("fsm::state_wait_scene_set_thread_id timed out");
             return scene_error_return_xl(ctx);
         }
 
         std::pair<bool, std::optional<fsm::fsm_state>> forced_scene_1npc::set_scene_thread_id_set_cb(game::context& ctx, float a_handle, int32_t a_thread_id) {
-            logger_custom::debug("fsm::state_set_scene_parameters timed out");
-            
+            logger_custom::debug("fsm::state_wait_scene_set_thread_id thread id = {}", a_thread_id);
+			if (!_sl_hook_data.has_value() || _sl_hook_data.value()._sl_hook_id != a_handle || a_thread_id < 0)  // invalid handle or thread id    
+                return std::make_pair(false, scene_error_return_xl(ctx));
+
+            // We could also wait for the animation start event of SLP+ now, but I don't think this is a guarantee, that the the scene really starts
+            // Anyway, we give the player a Frostfall Exposure buff, does no harm
+            ReducePlayerExposure(-50.f);
+
             release_assert(_sl_hook_data.has_value());
             auto hook_name = _sl_hook_data.value()._sl_hook_end_name;
             _sl_hook_data.reset();
@@ -473,11 +483,11 @@ namespace event_chain {
                 ctx._clock.get_play_second() + ctx._settings._scene_duration_max_seconds,
                 hook_name,
                 std::make_pair(
-                    forced_scene_1npc_ids::wait_dialog_finished_timeout_id,
+                    forced_scene_1npc_ids::wait_for_mod_event_timeout_id,
                     [this](game::context& c) { return this->wait_for_mod_event_timeout_cb(c); }
                 ),
                 std::make_pair(
-                    forced_scene_1npc_ids::wait_dialog_finished_success_id,
+                    forced_scene_1npc_ids::wait_for_mod_event_received_id,
                     [this](game::context& c) { return this->wait_for_mod_event_received_cb(c); }
                 )
             ));
