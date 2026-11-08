@@ -138,7 +138,9 @@ namespace equip {
 		// a_event->equipped ist true, wenn das Item GERADE angelegt wurde
 		if (a_event->equipped) {
 			auto* player = RE::PlayerCharacter::GetSingleton();
+			release_assert(player);
 			auto* boundObj = RE::TESForm::LookupByID<RE::TESBoundObject>(a_event->baseObject);
+			if (!boundObj) return RE::BSEventNotifyControl::kContinue;
 
 			// Only allow ammo the player can craft itself
 			if (boundObj->IsAmmo()) {
@@ -150,7 +152,7 @@ namespace equip {
 					}
 				}
 			}
-			else if (boundObj && (boundObj->IsWeapon() || boundObj->IsArmor() || boundObj->Is(RE::FormType::AlchemyItem))) {
+			else if (boundObj->IsWeapon() || boundObj->IsArmor() || boundObj->Is(RE::FormType::AlchemyItem)) {
 
 				// Hier greift deine Heuristik! 
 				// ACHTUNG: Bei diesem Event müssen wir die ExtraData über das Inventar des Players holen,
