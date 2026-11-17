@@ -22,7 +22,7 @@ namespace event_chain {
         if (next_play_second < 0.f) next_play_second = 0.f;
         
         return a_serde->WriteRecordData(&next_play_second, sizeof(next_play_second))
-            && a_serde->WriteRecordData(&_next_game_day, sizeof(_next_game_day))
+            //&& a_serde->WriteRecordData(&_next_game_day, sizeof(_next_game_day))
             && a_serde->WriteRecordData(&_delay_play_seconds, sizeof(_delay_play_seconds))
             && a_serde->WriteRecordData(&_delay_game_days, sizeof(_delay_game_days))
             && a_serde->WriteRecordData(&_delay_retry_play_seconds, sizeof(_delay_retry_play_seconds))
@@ -35,8 +35,8 @@ namespace event_chain {
 
         current_read = a_serde->ReadRecordData(&_next_play_second, sizeof(_next_play_second));
         if (current_read != sizeof(_next_play_second)) return -1; else read_bytes += current_read;
-        current_read = a_serde->ReadRecordData(&_next_game_day, sizeof(_next_game_day));
-        if (current_read != sizeof(_next_game_day)) return -1; else read_bytes += current_read;
+        //current_read = a_serde->ReadRecordData(&_next_game_day, sizeof(_next_game_day));
+        //if (current_read != sizeof(_next_game_day)) return -1; else read_bytes += current_read;
         current_read = a_serde->ReadRecordData(&_delay_play_seconds, sizeof(_delay_play_seconds));
         if (current_read != sizeof(_delay_play_seconds)) return -1; else read_bytes += current_read;
         current_read = a_serde->ReadRecordData(&_delay_game_days, sizeof(_delay_game_days));
@@ -153,26 +153,33 @@ namespace event_chain {
             logger_custom::debug("forced_scene_1npc::trigger_phase1");
 
             // quick check
-            if (_next_game_day > ctx._clock.get_game_day()) {
-                logger_custom::debug("forced_scene_1npc::trigger_phase1 game day cooldown still active");
-                return false;  // fsm calls update_cooldown if trigger_phase1 returns false, don't have to do this here
-            }
+            //if (_next_game_day > ctx._clock.get_game_day()) {
+            //    logger_custom::debug("forced_scene_1npc::trigger_phase1 game day cooldown still active");
+            //    return false;  // fsm calls update_cooldown if trigger_phase1 returns false, don't have to do this here
+            //}
 
             // expensive check
             std::vector< std::pair<float, RE::Actor*> > males;
             std::vector< std::pair<float, RE::Actor*> > females;
-            auto result = scanner::scan_actors(2000.f, males, females);
+            auto result = scanner::scan_actors(2000.f, males, females); // if more events doing this, better reuse results
             if (result && males.size()) {
                 int n = scanner::nth_nearest(3, males);
                 if (n > 0) {
                     RE::Actor* actor = males[0].second;
                     if (!skyrim_util::is_valid_for_event(actor))
                         return false;
+                    if (ctx._clock.get_game_day() + _delay_game_days < stats::stat_manager::get_last_event_time(actor)) {
+                        logger_custom::debug("forced_scene_1npc::trigger_phase1 actor on cooldown");
+                        return false;
+                    }
+
                     auto roll = ctx._rng.gen_float(0.f, 1.f);
                     //auto roll = -1.f; // always trigger for testing
                     auto arousal = stats::stat_manager::get_actor_arousal(actor);
-                    logger_custom::debug("forced_scene_1npc::trigger_phase1 roll={}, arousal={}, trigger => {}", roll, arousal, roll <= arousal);
-                    if (roll > arousal) {
+                    auto prob = arousal * arousal / 4.f; // parabolic * correction factor check interval / desired mean_time
+
+                    logger_custom::debug("forced_scene_1npc::trigger_phase1 roll={}, prob={}, trigger => {}", roll, prob, roll <= prob);
+                    if (roll > prob) {
                         return false;
                     }
                     _npc1_handle = actor->GetHandle();
@@ -501,7 +508,11 @@ namespace event_chain {
         
         std::optional<fsm::fsm_state> forced_scene_1npc::wait_for_mod_event_received_cb(game::context& ctx) {
             logger_custom::debug("fsm::state_wait_for_mod_event event received");
-            // TODO: Update statistics
+            // TODO: More statistics, better probability calculations
+            auto actorPtr = _npc1_handle.get();
+            if (actorPtr) {
+                stats::stat_manager::set_last_event_time(actorPtr.get(), ctx._clock.get_game_day());
+            }
             reset_npc1_handle();
             set_regular_cooldown(ctx);
             return fsm::state_idle{};

@@ -11,7 +11,7 @@ namespace event_chain {
 	concept IsValidEventChain = requires(T ec, game::context& ctx, SKSE::SerializationInterface * a_serde, float a_current_time) {
 		{ ec.trigger_phase1(ctx) } -> std::same_as<bool>;
 		{ ec.get_next_p() } -> std::same_as<float>;
-		{ ec.get_next_g() } -> std::same_as<float>;
+		//{ ec.get_next_g() } -> std::same_as<float>;
 		{ ec.set_retry_cooldown(ctx) } -> std::same_as<void>;
 		{ ec.serialize(a_serde, a_current_time) } -> std::same_as<bool>;
 	};

@@ -20,6 +20,7 @@ namespace fsm {
 			_timeout_p(t), _handle(a_handle),
 			on_timeout(std::move(a_timeout_cb)),
 			on_serve(std::move(a_serve_cb)) {
+			logger_custom::debug("state_serve_scene_parameters timeout set to {}", _timeout_p);
 		}
 
 		std::optional<fsm_state> handle_tick(game::context& a_ctx);

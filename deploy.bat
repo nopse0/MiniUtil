@@ -5,4 +5,4 @@ set plugindest=%dest%\overwrite
 set inisrc=%root%\config
 copy %pluginsrc%\*.dll %plugindest%\SKSE\Plugins\
 copy %pluginsrc%\*.pdb %plugindest%\SKSE\Plugins\
-copy %inisrc%\*.ini %plugindest%\SKSE\Plugins\
+rem copy %inisrc%\*.ini %plugindest%\SKSE\Plugins\

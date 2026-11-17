@@ -14,6 +14,6 @@ namespace settings {
 		float _papyrus_sattelite_timeout_seconds = 10.f;
 		float _scene_duration_max_seconds = 180.f;
 
-		delay_def _forced_scene_1npc_delays = delay_def{60.f, 0.f, 20.f};
+		delay_def _forced_scene_1npc_delays = delay_def{60.f, 2.f/24.f, 20.f};  // default: global check interval 60s (20s after error), 2h game time cooldown per actor
 	};
 }

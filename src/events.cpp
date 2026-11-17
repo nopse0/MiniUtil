@@ -86,20 +86,20 @@ namespace event_chain {
 	static inline bool event_less(const event_variant& lhs, const event_variant& rhs) {
 		auto lhs_play = std::visit([](const auto& ev) { return ev.get_next_p(); }, lhs);
 		auto rhs_play = std::visit([](const auto& ev) { return ev.get_next_p(); }, rhs);
-		if (lhs_play == rhs_play) {
-			auto lhs_game = std::visit([](const auto& ev) { return ev.get_next_g(); }, lhs);
-			auto rhs_game = std::visit([](const auto& ev) { return ev.get_next_g(); }, rhs);
-			return lhs_game < rhs_game;
-		}
-		else return lhs_play < rhs_play;
+		//if (lhs_play == rhs_play) {   // Using game time delay for per actor cooldowns now, doesn't affect the event check order
+		//	auto lhs_game = std::visit([](const auto& ev) { return ev.get_next_g(); }, lhs);
+		//	auto rhs_game = std::visit([](const auto& ev) { return ev.get_next_g(); }, rhs);
+		//	return lhs_game < rhs_game;
+		//}
+		return lhs_play < rhs_play;
 	}
 
 	void manager::initialize(game::context& ctx) {
 		auto nowp = ctx._clock.get_play_second();
-		auto nowg = ctx._clock.get_game_day();
+		//auto nowg = ctx._clock.get_game_day();
 
 		auto& ed = ctx._settings._forced_scene_1npc_delays;
-		auto fs = forced_scene_1npc::forced_scene_1npc { nowp + ed._cooldown_p, nowg + ed._cooldown_g, ed._cooldown_p, ed._cooldown_g, ed._retry_delay_p };
+		auto fs = forced_scene_1npc::forced_scene_1npc { nowp + ed._cooldown_p, ed._cooldown_p, ed._cooldown_g, ed._retry_delay_p };
 
 		_events.push_back(std::move(fs));
 	}

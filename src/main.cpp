@@ -398,6 +398,7 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
 	SI_Error err = ini.LoadFile(ini_name);
 	if (err == SI_OK) {
 		InitializeLogging(&ini);
+		ModDisabled = ini.GetLongValue("Config", "ModDisabled", 0);
 		ModReset = ini.GetLongValue("Config", "ModReset", 0);
 		logger::info("ModReset = {}", ModReset);
 		ResetSkills = ini.GetLongValue("Config", "ResetSkills", 0);

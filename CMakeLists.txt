@@ -46,10 +46,13 @@ set(sources
 
 set(headers
 	src/PCH.h
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lib/SlaveTatsNG/include>/jcontainers_wrapper.h"
     "include/stat_tracker.h"
 )
 
 set(sources ${sources}
+    # Using SlaveTats JContainers wrapper here (only this source file needed)
+    "${CMAKE_CURRENT_SOURCE_DIR}/lib/SlaveTatsNG/src/jcontainers_wrapper.cpp"
     src/main.cpp
     src/scanner.cpp
     src/struggle_game.cpp
@@ -111,6 +114,7 @@ add_library("${PROJECT_NAME}::${PROJECT_NAME}" ALIAS "${PROJECT_NAME}")
 target_include_directories(${PROJECT_NAME}
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lib/SlaveTatsNG/include>"
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lib/mcp>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/lib/frontier>
 		${SIMPLEINI_INCLUDE_DIRS}

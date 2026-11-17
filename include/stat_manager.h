@@ -18,5 +18,8 @@ namespace stats {
 			return 0.f;
 		}
 
+		static float get_last_event_time(RE::Actor* a_actor);
+		static void set_last_event_time(RE::Actor* a_actor, float a_time);
+
 	};
 }
