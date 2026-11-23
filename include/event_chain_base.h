@@ -20,22 +20,21 @@ namespace event_chain {
 		int32_t deserialize(SKSE::SerializationInterface* a_serde);
 
 		inline void set_retry_cooldown(game::context& ctx) {
-			_is_active = false;
+			_is_active = false;       /////////////////////////////////// unsets active event chain
 			_next_play_second = ctx._clock.get_play_second() + _delay_retry_play_seconds;
-			logger_custom::debug("forced_scene_1npc set_retry_cooldown next_p={}", get_next_p());
+			logger_custom::debug("delayed::set_retry_cooldown next_p={}", get_next_p());
 		}
 
 		inline void set_retry_cooldown_xl(game::context& ctx, float a_extra_large_p) {
-			_is_active = false;
+			_is_active = false;      /////////////////////////////////// unsets active event chain
 			_next_play_second = ctx._clock.get_play_second() + std::max(_delay_retry_play_seconds, a_extra_large_p);
-			logger_custom::debug("forced_scene_1npc set_retry_cooldown_xl next_p={}", get_next_p());
+			logger_custom::debug("delayed::set_retry_cooldown_xl next_p={}", get_next_p());
 		}
 
 		inline void set_regular_cooldown(game::context& ctx) {
-			_is_active = false;
+			_is_active = false;      /////////////////////////////////// unsets active event chain
 			_next_play_second = ctx._clock.get_play_second() + _delay_play_seconds;
-			//_next_game_day = ctx._clock.get_game_day() + _delay_game_days;
-			logger_custom::debug("forced_scene_1npc set_regular_cooldown next_p={}", get_next_p());
+			logger_custom::debug("delayed::set_regular_cooldown next_p={}", get_next_p());
 		}
 	};
 

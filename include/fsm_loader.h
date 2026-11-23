@@ -7,24 +7,25 @@ namespace fsm {
 	namespace loader {
 
         template<typename ChainType>
-        state_wait_dialog_finished create_state_wait_dialog_finished(
+        state_dialog_open create_state_dialog_open(
             ChainType* chain,
             float timeout_val,
-            uint32_t timeout_id,
-            uint32_t dialog_finished_id)
+            const RE::ActorHandle& speaker,
+            uint32_t timeout_cb_id,
+            uint32_t dialog_opened_cb_id)
         {
             // 1. Die Callbacks direkt über dein bind_callback Template auflösen
             // Keine manuellen Args... mehr nötig!
             auto timeout_cb = bind_callback<
                 std::optional<::fsm::fsm_state>(ChainType::*)(game::context&)
-            >(timeout_id, chain);
+            >(timeout_cb_id, chain);
 
             auto dialog_cb = bind_callback<
                 std::optional<::fsm::fsm_state>(ChainType::*)(game::context&, RE::Actor*)
-            >(dialog_finished_id, chain);
+            >(dialog_opened_cb_id, chain);
 
             // 2. Den echten Custom-Konstruktor aufrufen und das fertige Objekt zurückgeben!
-            return state_wait_dialog_finished(timeout_val, std::move(timeout_cb), std::move(dialog_cb));
+            return state_dialog_open(timeout_val, speaker, std::move(timeout_cb), std::move(dialog_cb));
         }
 
 
@@ -55,7 +56,7 @@ namespace fsm {
         }
 
         template<typename ChainType>
-        state_serve_scene_parameters create_state_serve_scene_parameters(
+        state_scene_start create_state_scene_start(
             ChainType* chain,
             float timeout_val,
             float handle_val,
@@ -72,51 +73,36 @@ namespace fsm {
             >(serve_id, chain);
 
             // 2. Den echten Custom-Konstruktor aufrufen und das fertige Objekt zurückgeben!
-            return state_serve_scene_parameters(timeout_val, handle_val, std::move(timeout_cb), std::move(serve_cb));
+            return state_scene_start(timeout_val, handle_val, std::move(timeout_cb), std::move(serve_cb));
         }
 
         template<typename ChainType>
-        state_wait_scene_set_thread_id create_state_wait_scene_set_thread_id(
+        state_scene_end create_state_scene_end(
             ChainType* chain,
-            float timeout_val,
-            float handle_val,
-            uint32_t timeout_id,
-            uint32_t setter_id)
-        {
-            // 1. Die Callbacks direkt über dein bind_callback Template auflösen
-            auto timeout_cb = bind_callback<
-                std::optional<::fsm::fsm_state>(ChainType::*)(game::context&)
-            >(timeout_id, chain);
-
-            auto setter_cb = bind_callback<
-                std::pair<bool, std::optional<::fsm::fsm_state>>(ChainType::*)(game::context&, float, int32_t)
-            >(setter_id, chain);
-
-            // 2. Den echten Custom-Konstruktor aufrufen und das fertige Objekt zurückgeben!
-            return state_wait_scene_set_thread_id(timeout_val, handle_val, std::move(timeout_cb), std::move(setter_cb));
-        }
-
-        template<typename ChainType>
-        state_wait_for_mod_event create_state_wait_for_mod_event(
-            ChainType* chain,
-            float timeout_val,
-            uint32_t timeout_id,
-            uint32_t received_id)
+            float a_timeout,
+            float a_handle,
+            RE::BSFixedString a_event,
+            uint32_t timeout_cb_id,
+            uint32_t papyrus_cb_id,
+            uint32_t modevent_cb_id)
         {
             // 1. Die Callbacks direkt über dein bind_callback Template auflösen
             // Keine manuellen Args... mehr nötig!
             auto timeout_cb = bind_callback<
                 std::optional<::fsm::fsm_state>(ChainType::*)(game::context&)
-            >(timeout_id, chain);
+            >(timeout_cb_id, chain);
 
-            auto received_cb = bind_callback<
+            auto papyrus_cb = bind_callback<
+                std::pair<bool, std::optional<::fsm::fsm_state>>(ChainType::*)(game::context&, float a_handle, int32_t a_thread_id)
+            >(papyrus_cb_id, chain);
+
+            auto modevent_cb = bind_callback<
                 std::optional<::fsm::fsm_state>(ChainType::*)(game::context&)
-            >(received_id, chain);
+            >(modevent_cb_id, chain);
 
             // 2. Den echten Custom-Konstruktor aufrufen und das fertige Objekt zurückgeben!
-            return state_wait_for_mod_event(timeout_val, std::move(timeout_cb), std::move(received_cb));
+            return state_scene_end(a_timeout, a_handle, a_event, std::move(timeout_cb), std::move(papyrus_cb), std::move(modevent_cb));
         }
-
 
 	}
 }

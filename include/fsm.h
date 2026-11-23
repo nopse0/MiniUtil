@@ -20,7 +20,12 @@ namespace fsm {
 		}
 
 		void process_timer_tick(game::context& a_ctx);
-		void process_dialog_finished(game::context& a_ctx, RE::Actor* a_speaker);
+		//void process_dialog_finished(game::context& a_ctx, RE::Actor* a_speaker);
+		
+		void process_dialogmenu_open(game::context& a_ctx, RE::Actor* actor);
+		void process_dialogmenu_close(game::context& a_ctx);
+		void process_topicinfo_begin(game::context& a_ctx, RE::Actor* a_actor, RE::FormID a_form_id);
+
 		void process_mod_event(game::context& a_ctx, RE::BSFixedString a_event_name);
 
 		bool process_get_scene_parameters(game::context& a_ctx, RE::TESQuest* a_this, float a_handle);

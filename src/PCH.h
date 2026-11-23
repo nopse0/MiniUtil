@@ -14,6 +14,7 @@ using namespace std::string_view_literals;
 
 // Set on fatal errors, e.g. if I can't load my Forms from the .esp
 inline bool ModDisabled = false;
+inline bool ModTesting = false;
 
 inline FrontierAPI::IFrontier1* Frontier1 = nullptr;
 

@@ -19,7 +19,8 @@
             "nlohmann-json",
             "simpleini",
             "toml11",
-            "catch2"
+            "catch2",
+            "detours"
           ]
         }
     },

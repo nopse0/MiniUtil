@@ -19,17 +19,18 @@ namespace event_chain {
 
         namespace forced_scene_1npc_ids {
             constexpr uint32_t none = 0;
-            constexpr uint32_t wait_dialog_finished_timeout_id = 1;
-            constexpr uint32_t wait_dialog_finished_success_id = 2;
-            constexpr uint32_t backhug_sleep1_id = 3;
-            constexpr uint32_t backhug_sleep2_id = 4;
-            constexpr uint32_t poll_struggle_game_id = 5;
-            constexpr uint32_t serve_scene_parameters_timeout_id = 6;
-            constexpr uint32_t serve_scene_parameters_serve_id = 7;
-            constexpr uint32_t set_scene_thread_id_timeout_id = 8;
-            constexpr uint32_t set_scene_thread_id_set_id = 9;
-            constexpr uint32_t wait_for_mod_event_timeout_id = 10;
-            constexpr uint32_t wait_for_mod_event_received_id = 11;
+            constexpr uint32_t dialog_open_timeout_cb_id = 1;
+            constexpr uint32_t dialog_open_success_cb_id = 2;
+            constexpr uint32_t backhug_sleep1_cb_id = 3;
+            constexpr uint32_t backhug_sleep2_cb_id = 4;
+            constexpr uint32_t struggle_poll_cb_id = 5;
+            constexpr uint32_t scene_start_timeout_cb_id = 6;
+            constexpr uint32_t scene_start_success_cb_id = 7;
+            constexpr uint32_t scene_end_timeout_cb_id = 8;
+            constexpr uint32_t scene_end_papyrus_cb_id = 9;
+            constexpr uint32_t scene_end_modevent_cb_id = 10;
+            constexpr uint32_t dialog_close_menu_cb_id = 11;
+            constexpr uint32_t dialog_close_topicinfo_cb_id = 12;
         }
 
         struct forced_scene_1npc : delayed {
@@ -49,22 +50,23 @@ namespace event_chain {
             std::optional<fsm::fsm_state>  scene_error_return_xl(game::context& ctx);
 
             // Callbacks for fsm states
-            std::optional<fsm::fsm_state> wait_dialog_finished_timeout_cb(game::context& ctx);
-            std::optional<fsm::fsm_state> wait_dialog_finished_success_cb(game::context& ctx, RE::Actor* a_speaker);
+            std::optional<fsm::fsm_state> dialog_open_timeout_cb(game::context& ctx);
+            std::optional<fsm::fsm_state> dialog_open_success_cb(game::context& ctx, RE::Actor* a_speaker);
+
+            std::optional<fsm::fsm_state> dialog_close_topicinfo_cb(game::context& ctx, RE::Actor* a_speaker, RE::FormID a_form_id);
+            std::optional<fsm::fsm_state> dialog_close_menu_cb(game::context& ctx);
 
             std::optional<fsm::fsm_state> backhug_sleep1_cb(game::context& ctx);
             std::optional<fsm::fsm_state> backhug_sleep2_cb(game::context& ctx);
 
-            std::optional<fsm::fsm_state> poll_struggle_game_cb(game::context& ctx);
+            std::optional<fsm::fsm_state> struggle_poll_cb(game::context& ctx);
 
-            std::optional<fsm::fsm_state> serve_scene_parameters_timeout_cb(game::context& ctx);
-            std::pair<bool, std::optional<fsm::fsm_state>> serve_scene_parameters_serve_cb(game::context& ctx, RE::TESQuest* a_this, float a_handle);
+            std::optional<fsm::fsm_state> scene_start_timeout_cb(game::context& ctx);
+            std::pair<bool, std::optional<fsm::fsm_state>> scene_start_success_cb(game::context& ctx, RE::TESQuest* a_this, float a_handle);
 
-            std::optional<fsm::fsm_state> set_scene_thread_id_timeout_cb(game::context& ctx);
-            std::pair<bool, std::optional<fsm::fsm_state>> set_scene_thread_id_set_cb(game::context& ctx, float a_handle, int32_t a_thread_id);
-
-            std::optional<fsm::fsm_state> wait_for_mod_event_timeout_cb(game::context& ctx);
-            std::optional<fsm::fsm_state> wait_for_mod_event_received_cb(game::context& ctx);
+            std::optional<fsm::fsm_state> scene_end_timeout_cb(game::context& ctx);
+            std::pair<bool, std::optional<fsm::fsm_state>> scene_end_papyrus_cb(game::context& ctx, float a_handle, int32_t a_thread_id);
+            std::optional<fsm::fsm_state> scene_end_modevent_cb(game::context& ctx);
 
             template<typename Signature>
             static Signature resolve(uint32_t id) {
@@ -73,35 +75,34 @@ namespace event_chain {
                 // SIGNATUR 1: Standard-Timeout (game::context&)
                 if constexpr (std::is_same_v<Signature, std::optional<fsm::fsm_state>(forced_scene_1npc::*)(game::context&)>) {
                     switch (id) {
-                    case wait_dialog_finished_timeout_id: return &forced_scene_1npc::wait_dialog_finished_timeout_cb;
-                    case backhug_sleep1_id: return &forced_scene_1npc::backhug_sleep1_cb;
-                    case backhug_sleep2_id: return &forced_scene_1npc::backhug_sleep2_cb;
-                    case poll_struggle_game_id: return &forced_scene_1npc::poll_struggle_game_cb;
-                    case serve_scene_parameters_timeout_id: return &forced_scene_1npc::serve_scene_parameters_timeout_cb;
-                    case set_scene_thread_id_set_id: return &forced_scene_1npc::set_scene_thread_id_timeout_cb;
-                    case wait_for_mod_event_timeout_id: return &forced_scene_1npc::wait_for_mod_event_timeout_cb;
-                    case wait_for_mod_event_received_id: return &forced_scene_1npc::wait_for_mod_event_received_cb;
+                    case dialog_open_timeout_cb_id: return &forced_scene_1npc::dialog_open_timeout_cb;
+                    case backhug_sleep1_cb_id: return &forced_scene_1npc::backhug_sleep1_cb;
+                    case backhug_sleep2_cb_id: return &forced_scene_1npc::backhug_sleep2_cb;
+                    case struggle_poll_cb_id: return &forced_scene_1npc::struggle_poll_cb;
+                    case scene_start_timeout_cb_id: return &forced_scene_1npc::scene_start_timeout_cb;
+                    case scene_end_papyrus_cb_id: return &forced_scene_1npc::scene_end_timeout_cb;
+                    case scene_end_modevent_cb_id: return &forced_scene_1npc::scene_end_modevent_cb;
                     default: return nullptr;
                     }
                 }
-                // SIGNATUR 2: Dialog Finished (game::context&, RE::Actor*)
+                // SIGNATUR 2: Dialog Opened (game::context&, RE::Actor*)
                 else if constexpr (std::is_same_v<Signature, std::optional<fsm::fsm_state>(forced_scene_1npc::*)(game::context&, RE::Actor*)>) {
                     switch (id) {
-                    case wait_dialog_finished_success_id: return &forced_scene_1npc::wait_dialog_finished_success_cb;
+                    case dialog_open_success_cb_id: return &forced_scene_1npc::dialog_open_success_cb;
                     default: return nullptr;
                     }
                 }
                 // SIGNATUR 3:
                 else if constexpr (std::is_same_v<Signature, std::pair<bool, std::optional<fsm::fsm_state>>(forced_scene_1npc::*)(game::context&, RE::TESQuest * a_this, float a_handle)>) {
                     switch (id) {
-                    case serve_scene_parameters_serve_id: return &forced_scene_1npc::serve_scene_parameters_serve_cb;
+                    case scene_start_success_cb_id: return &forced_scene_1npc::scene_start_success_cb;
                     default: return nullptr;
                     }
                 }
                 // SIGNATUR 4:
                 else if constexpr (std::is_same_v<Signature, std::pair<bool, std::optional<fsm::fsm_state>>(forced_scene_1npc::*)(game::context&, float a_handle, int32_t a_thread_id)>) {
                     switch (id) {
-                    case set_scene_thread_id_set_id: return &forced_scene_1npc::set_scene_thread_id_set_cb;
+                    case scene_end_papyrus_cb_id: return &forced_scene_1npc::scene_end_papyrus_cb;
                     default: return nullptr;
                     }
                 }

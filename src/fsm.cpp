@@ -33,20 +33,63 @@ namespace fsm {
 		}
 	}
 	
-	void fsm::process_dialog_finished(game::context& a_ctx, RE::Actor* a_speaker) {
+	//void fsm::process_dialog_finished(game::context& a_ctx, RE::Actor* a_speaker) {
+	//	auto next_state = std::visit([&a_ctx, a_speaker](auto& active_state) {
+	//		if constexpr (requires { active_state.handle_dialog_finished(a_ctx, a_speaker); }) {
+	//			return active_state.handle_dialog_finished(a_ctx, a_speaker);
+	//		}
+	//		else {
+	//			return std::optional<fsm_state>{};
+	//		}
+	//	}, _current_state);
+
+	//	if (next_state.has_value()) {
+	//		_current_state = std::move(*next_state);
+	//	}
+
+	//}
+
+	void fsm::process_dialogmenu_open(game::context& a_ctx, RE::Actor* a_speaker) {
 		auto next_state = std::visit([&a_ctx, a_speaker](auto& active_state) {
-			if constexpr (requires { active_state.handle_dialog_finished(a_ctx, a_speaker); }) {
-				return active_state.handle_dialog_finished(a_ctx, a_speaker);
+			if constexpr (requires { active_state.handle_dialogmenu_open(a_ctx, a_speaker); }) {
+				return active_state.handle_dialogmenu_open(a_ctx, a_speaker);
 			}
 			else {
 				return std::optional<fsm_state>{};
 			}
-		}, _current_state);
-
+			}, _current_state);
 		if (next_state.has_value()) {
 			_current_state = std::move(*next_state);
 		}
 
+	}
+	
+	void fsm::process_dialogmenu_close(game::context& a_ctx) {
+		auto next_state = std::visit([&a_ctx](auto& active_state) {
+			if constexpr (requires { active_state.handle_dialogmenu_close(a_ctx); }) {
+				return active_state.handle_dialogmenu_close(a_ctx);
+			}
+			else {
+				return std::optional<fsm_state>{};
+			}
+			}, _current_state);
+		if (next_state.has_value()) {
+			_current_state = std::move(*next_state);
+		}
+	}
+	
+	void fsm::process_topicinfo_begin(game::context& a_ctx, RE::Actor* a_speaker, RE::FormID a_form_id) {
+		auto next_state = std::visit([&a_ctx, a_speaker, a_form_id](auto& active_state) {
+			if constexpr (requires { active_state.handle_topicinfo_begin(a_ctx, a_speaker, a_form_id); }) {
+				return active_state.handle_topicinfo_begin(a_ctx, a_speaker, a_form_id);
+			}
+			else {
+				return std::optional<fsm_state>{};
+			}
+			}, _current_state);
+		if (next_state.has_value()) {
+			_current_state = std::move(*next_state);
+		}
 	}
 
 	void fsm::process_mod_event(game::context& a_ctx, RE::BSFixedString a_event_name) {

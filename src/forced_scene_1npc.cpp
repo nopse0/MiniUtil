@@ -22,7 +22,6 @@ namespace event_chain {
         if (next_play_second < 0.f) next_play_second = 0.f;
         
         return a_serde->WriteRecordData(&next_play_second, sizeof(next_play_second))
-            //&& a_serde->WriteRecordData(&_next_game_day, sizeof(_next_game_day))
             && a_serde->WriteRecordData(&_delay_play_seconds, sizeof(_delay_play_seconds))
             && a_serde->WriteRecordData(&_delay_game_days, sizeof(_delay_game_days))
             && a_serde->WriteRecordData(&_delay_retry_play_seconds, sizeof(_delay_retry_play_seconds))
@@ -35,8 +34,6 @@ namespace event_chain {
 
         current_read = a_serde->ReadRecordData(&_next_play_second, sizeof(_next_play_second));
         if (current_read != sizeof(_next_play_second)) return -1; else read_bytes += current_read;
-        //current_read = a_serde->ReadRecordData(&_next_game_day, sizeof(_next_game_day));
-        //if (current_read != sizeof(_next_game_day)) return -1; else read_bytes += current_read;
         current_read = a_serde->ReadRecordData(&_delay_play_seconds, sizeof(_delay_play_seconds));
         if (current_read != sizeof(_delay_play_seconds)) return -1; else read_bytes += current_read;
         current_read = a_serde->ReadRecordData(&_delay_game_days, sizeof(_delay_game_days));
@@ -74,12 +71,7 @@ namespace event_chain {
                 return false;
 
             // Actor Form id
-            RE::FormID formId = 0;
-            auto actorPtr = _npc1_handle.get();
-            if (actorPtr) {
-                formId = actorPtr->GetFormID();
-            }
-            if (!a_serde->WriteRecordData(&formId, sizeof(formId))) return false;
+            if (!serialization::SaveActorHandle(a_serde, _npc1_handle)) return false;
 
             uint8_t set_away = _set_away;
             if (!a_serde->WriteRecordData(&set_away, sizeof(set_away))) return false;
@@ -124,24 +116,10 @@ namespace event_chain {
                 _sl_hook_data = data;
             }
 
-            RE::FormID savedFormID = 0;     // Lot of boiler-plate code for serializing actor handles
-            current_read = a_serde->ReadRecordData(&savedFormID, sizeof(savedFormID));
-            if (current_read != sizeof(savedFormID)) return -1; else read_bytes += current_read;
-            // Relocate FormID
-            if (savedFormID != 0) {
-                RE::FormID resolvedFormID = 0;
-                // CRITICAL: SKSE korrigiert hier die FormID basierend auf der aktuellen Load-Order!
-                if (a_serde->ResolveFormID(savedFormID, resolvedFormID)) {
-                    // Hole das Objekt über die korrigierte FormID
-                    auto refr = RE::TESForm::LookupByID<RE::Actor>(resolvedFormID);
-                    if (refr) {
-                        // Erstelle wieder dein sicheres ObjectRefHandle für deine Klasse
-                        _npc1_handle = refr->GetHandle();
-                    }
-                }
-            }
+            current_read = serialization::LoadActorHandle(a_serde, _npc1_handle);
+            if (current_read < 0) return -1; else read_bytes += current_read;
  
-            uint8_t set_away;
+            uint8_t set_away;  // TODO remove, I don't use Frontier anymore
             current_read = a_serde->ReadRecordData(&set_away, sizeof(set_away));
             if (current_read != sizeof(set_away)) return -1; else read_bytes += current_read;
             _set_away = set_away;
@@ -149,16 +127,18 @@ namespace event_chain {
             return read_bytes;
         }
 
+        /////////////////////////////////////////////////////////////////////////////////////////////////////
+        //
+        // Really important, don't forget: When the event chain is started, and at all places, where it is ended 
+        // (early returns!), the _is_active flag must be updated (otherwise the event manager doesn't find the 
+        // active event chain.  
+        // Also, don't forget to enable save games again, after disabling them !!!
+        // 
+        /////////////////////////////////////////////////////////////////////////////////////////////////////
+
         bool forced_scene_1npc::trigger_phase1(game::context& ctx) {
             logger_custom::debug("forced_scene_1npc::trigger_phase1");
 
-            // quick check
-            //if (_next_game_day > ctx._clock.get_game_day()) {
-            //    logger_custom::debug("forced_scene_1npc::trigger_phase1 game day cooldown still active");
-            //    return false;  // fsm calls update_cooldown if trigger_phase1 returns false, don't have to do this here
-            //}
-
-            // expensive check
             std::vector< std::pair<float, RE::Actor*> > males;
             std::vector< std::pair<float, RE::Actor*> > females;
             auto result = scanner::scan_actors(2000.f, males, females); // if more events doing this, better reuse results
@@ -174,12 +154,11 @@ namespace event_chain {
                     }
 
                     auto roll = ctx._rng.gen_float(0.f, 1.f);
-                    //auto roll = -1.f; // always trigger for testing
                     auto arousal = stats::stat_manager::get_actor_arousal(actor);
                     auto prob = arousal * arousal / 4.f; // parabolic * correction factor check interval / desired mean_time
 
                     logger_custom::debug("forced_scene_1npc::trigger_phase1 roll={}, prob={}, trigger => {}", roll, prob, roll <= prob);
-                    if (roll > prob) {
+                    if (roll > prob && !ModTesting) {
                         return false;
                     }
                     _npc1_handle = actor->GetHandle();
@@ -200,7 +179,7 @@ namespace event_chain {
             }
             auto actor = aptr.get();
 
-            if (Frontier1) {
+            if (Frontier1) { // TODO, remove Frontier, dynamically generated navmeshes at runtime suck (full of holes!)
                 _set_away = Frontier1->SetAway(actor->GetFormID(), true, "MiniUtil.dll");
                 logger_custom::debug("forced_scene_1npc::trigger_phase2 SetAway result={}", _set_away);
             }
@@ -215,19 +194,21 @@ namespace event_chain {
             actor_util::add_package_override(actor, form_cache::MiniMolestForceGreetPackage, 100, 1);
             actor->EvaluatePackage(true, false);
 
-            _is_active = true;
+            _is_active = true;              //////////////////////////////////// set as active event chain (needed for serialization)
 
-            return fsm::state_wait_dialog_finished(
+            return fsm::state_dialog_open(
                 ctx._clock.get_play_second() + ctx._settings._force_greet_timeout_p,
+                actor->GetHandle(),
                 std::make_pair(
-                    forced_scene_1npc_ids::wait_dialog_finished_timeout_id,
-                    [this](game::context& c) { return this->wait_dialog_finished_timeout_cb(c); }
+                    forced_scene_1npc_ids::dialog_open_timeout_cb_id,
+                    [this](game::context& c) { return this->dialog_open_timeout_cb(c); }
                 ),
                 std::make_pair(
-                    forced_scene_1npc_ids::wait_dialog_finished_success_id,
-                    [this](game::context& c, RE::Actor* a) { return this->wait_dialog_finished_success_cb(c, a); }
+                    forced_scene_1npc_ids::dialog_open_success_cb_id,
+                    [this](game::context& c, RE::Actor* a) { return this->dialog_open_success_cb(c, a); }
                 )
             );
+
         }
 
         void forced_scene_1npc::reset_npc1_handle() {
@@ -242,7 +223,7 @@ namespace event_chain {
             _npc1_handle = RE::ActorHandle();
         }
 
-        std::optional<fsm::fsm_state> forced_scene_1npc::wait_dialog_finished_timeout_cb(game::context& ctx) {
+        std::optional<fsm::fsm_state> forced_scene_1npc::dialog_open_timeout_cb(game::context& ctx) {
             logger_custom::debug("forced_scene_1npc::wait_dialog_finished_timeout_cb force greet timed out");
             release_assert(form_cache::MiniMolestForceGreetType != nullptr);
             release_assert(form_cache::MiniMolestForceGreetOutcome != nullptr);
@@ -250,7 +231,7 @@ namespace event_chain {
             form_cache::MiniMolestForceGreetOutcome->value = 0.f;
             auto actorPtr = _npc1_handle.get();
             if (actorPtr) {
-                auto actor = actorPtr.get();
+                auto* actor = actorPtr.get();
                 actor_util::remove_package_override(actor, form_cache::MiniMolestForceGreetPackage);
                 actor->EvaluatePackage(true, false);
             }
@@ -259,16 +240,37 @@ namespace event_chain {
             return fsm::state_idle{};
         }
 
-        std::optional<fsm::fsm_state> forced_scene_1npc::wait_dialog_finished_success_cb(game::context& ctx, RE::Actor* a_speaker) {
-            logger_custom::debug("state_sleep::trigger_phase2 dialog finished callback force greet dialog done");
+        std::optional<fsm::fsm_state> forced_scene_1npc::dialog_open_success_cb(game::context& ctx, RE::Actor* a_speaker) {
+            logger_custom::debug("forced_scene_1npc::wait_dialog_opened_success_cb force greet dialogmenu opened");
+            return fsm::state_dialog_close(
+                std::make_pair(
+                    forced_scene_1npc_ids::dialog_close_topicinfo_cb_id,
+                    [this](game::context& c, RE::Actor* a, RE::FormID f) { return this->dialog_close_topicinfo_cb(c, a, f); }
+                ),
+                std::make_pair(
+                    forced_scene_1npc_ids::dialog_close_menu_cb_id,
+                    [this](game::context& c) { return this->dialog_close_menu_cb(c); }
+                )
+            );
 
+        }
+
+
+        std::optional<fsm::fsm_state> forced_scene_1npc::dialog_close_topicinfo_cb(game::context& ctx, RE::Actor* a_speaker, RE::FormID a_form_id) {
+            // topicinfos not needed, everything defined via gloabal variables atm.
+            logger_custom::debug("forced_scene_1npc::wait_dialog_closed_topicinfo_cb topicinfo={}", a_form_id);
+            return std::nullopt;
+        }
+        
+        std::optional<fsm::fsm_state> forced_scene_1npc::dialog_close_menu_cb(game::context& ctx) {
+            logger_custom::debug("forced_scene_1npc::dialog_close_menu_cb force greet dialogmenu closed");
             release_assert(form_cache::MiniMolestForceGreetType != nullptr);
             release_assert(form_cache::MiniMolestForceGreetOutcome != nullptr);
             auto outcome = form_cache::MiniMolestForceGreetOutcome->value;
             form_cache::MiniMolestForceGreetType->value = 0.f;
             form_cache::MiniMolestForceGreetOutcome->value = 0.f;
             auto actorPtr = _npc1_handle.get();
-            if (!actorPtr || outcome != 1 || actorPtr.get() != a_speaker) {   // if speaker != npc1, something is wrong
+            if (!actorPtr || outcome != 1) {
                 if (actorPtr) {
                     auto actor = actorPtr.get();
                     actor_util::remove_package_override(actor, form_cache::MiniMolestForceGreetPackage);
@@ -284,14 +286,15 @@ namespace event_chain {
 
             _backhug_data = animation::backhug::backhug_start(actor);
 
+            serialization::save_blocker::block();                ////////////////////////////// Disable save games, until struggle and scene are finished
+
             return fsm::state_sleep(
                 ctx._clock.get_play_second() + 0.5f,
                 std::make_pair(
-                    forced_scene_1npc_ids::backhug_sleep1_id,
+                    forced_scene_1npc_ids::backhug_sleep1_cb_id,
                     [this](game::context& c) { return this->backhug_sleep1_cb(c); }
                 ));
         }
-
 
         std::optional<fsm::fsm_state> forced_scene_1npc::backhug_sleep1_cb(game::context& ctx) {
             release_assert(_backhug_data.has_value());
@@ -299,7 +302,7 @@ namespace event_chain {
             return fsm::state_sleep(
                 ctx._clock.get_play_second() + 0.5f,
                 std::make_pair(
-                    forced_scene_1npc_ids::backhug_sleep2_id,
+                    forced_scene_1npc_ids::backhug_sleep2_cb_id,
                     [this](game::context& c) { return this->backhug_sleep2_cb(c); }
                 ));
         }
@@ -310,6 +313,7 @@ namespace event_chain {
                 animation::backhug::backhug_stop_player();  // cleanup
                 _backhug_data.reset();
                 set_retry_cooldown(ctx);
+                serialization::save_blocker::unblock();             ////////////////////////////// Enable save games again
                 return fsm::state_idle{};
             }
             release_assert(_backhug_data.has_value());
@@ -318,12 +322,12 @@ namespace event_chain {
             ctx._struggle_game.start();
             return fsm::state_poll(
                 std::make_pair(
-                    forced_scene_1npc_ids::poll_struggle_game_id,
-                    [this](game::context& c) { return this->poll_struggle_game_cb(c); }
+                    forced_scene_1npc_ids::struggle_poll_cb_id,
+                    [this](game::context& c) { return this->struggle_poll_cb(c); }
                 ));
         }
  
-        std::optional<fsm::fsm_state> forced_scene_1npc::poll_struggle_game_cb(game::context& ctx) {
+        std::optional<fsm::fsm_state> forced_scene_1npc::struggle_poll_cb(game::context& ctx) {
             auto struggle_state = ctx._struggle_game.get_state();
             if (struggle_state == minigame::struggle_game::state::playing)
                 return std::nullopt;
@@ -332,6 +336,7 @@ namespace event_chain {
             auto actorPtr = _npc1_handle.get();
             if (!actorPtr) {  // error, actor gone
                 set_retry_cooldown(ctx);
+                serialization::save_blocker::unblock();             ////////////////////////////// Enable save games again
                 return fsm::state_idle{};
             }
             auto actor = actorPtr.get();
@@ -342,6 +347,7 @@ namespace event_chain {
                 // Successfully struggled free, TODO: update statistics
                 reset_npc1_handle();
                 set_regular_cooldown(ctx);
+                serialization::save_blocker::unblock();             ////////////////////////////// Enable save games again
                 return fsm::state_idle{};
             }
 
@@ -358,16 +364,16 @@ namespace event_chain {
             release_assert(inputSrc != nullptr);
             inputSrc->SendEvent(&modEvent);
 
-            return fsm::state_serve_scene_parameters(
+            return fsm::state_scene_start(
                 ctx._clock.get_play_second() + ctx._settings._papyrus_sattelite_timeout_seconds,
                 handle,
                 std::make_pair(
-                    forced_scene_1npc_ids::serve_scene_parameters_timeout_id, 
-                    [this](game::context& c) { return this->serve_scene_parameters_timeout_cb(c); }
+                    forced_scene_1npc_ids::scene_start_timeout_cb_id, 
+                    [this](game::context& c) { return this->scene_start_timeout_cb(c); }
                 ),    
                 std::make_pair(
-                    forced_scene_1npc_ids::serve_scene_parameters_serve_id,
-                    [this](game::context& c, RE::TESQuest* a_this, float a_handle) { return this->serve_scene_parameters_serve_cb(c, a_this, a_handle); }
+                    forced_scene_1npc_ids::scene_start_success_cb_id,
+                    [this](game::context& c, RE::TESQuest* a_this, float a_handle) { return this->scene_start_success_cb(c, a_this, a_handle); }
                 )
             );
         }
@@ -376,6 +382,7 @@ namespace event_chain {
             reset_npc1_handle();
             _sl_hook_data.reset();
             set_retry_cooldown(ctx);
+            serialization::save_blocker::unblock();             ////////////////////////////// Enable save games again
             return fsm::state_idle{};
         }
 
@@ -383,15 +390,16 @@ namespace event_chain {
             reset_npc1_handle();
             _sl_hook_data.reset();
             set_retry_cooldown_xl(ctx, ctx._settings._scene_duration_max_seconds);
+            serialization::save_blocker::unblock();             ////////////////////////////// Enable save games again
             return fsm::state_idle{};
         }
 
-        std::optional<fsm::fsm_state> forced_scene_1npc::serve_scene_parameters_timeout_cb(game::context& ctx) {
-            logger_custom::debug("fsm::state_serve_scene_parameters timed out");
+        std::optional<fsm::fsm_state> forced_scene_1npc::scene_start_timeout_cb(game::context& ctx) {
+            logger_custom::debug("fsm::state_scene_start timed out");
             return scene_error_return(ctx);
         }
 
-        std::pair<bool, std::optional<fsm::fsm_state>> forced_scene_1npc::serve_scene_parameters_serve_cb(game::context& ctx, RE::TESQuest* a_this, float a_handle) {
+        std::pair<bool, std::optional<fsm::fsm_state>> forced_scene_1npc::scene_start_success_cb(game::context& ctx, RE::TESQuest* a_this, float a_handle) {
             if (!_sl_hook_data.has_value() || _sl_hook_data.value()._sl_hook_id != a_handle)  // invalid handle    
                 return std::make_pair(false, scene_error_return(ctx));
             
@@ -400,15 +408,15 @@ namespace event_chain {
             auto policy = vm->GetObjectHandlePolicy();
             RE::VMHandle vm_handle = policy->GetHandleForObject(a_this->GetFormType(), a_this);
             if (vm_handle == policy->EmptyHandle()) {
-                logger_custom::debug("state_serve_scene_parameters error vm handle={}", vm_handle);
+                logger_custom::debug("state_scene_start error vm handle={}", vm_handle);
                 return std::make_pair(false, scene_error_return(ctx));
             }
             RE::BSTSmartPointer<RE::BSScript::Object> scriptObject;
             if (!vm->FindBoundObject(vm_handle, "MiniMolestMain_Script", scriptObject) || !scriptObject) {
-                logger_custom::debug("state_serve_scene_parameters error scriptObject=", (void*)scriptObject.get());
+                logger_custom::debug("state_scene_start error scriptObject=", (void*)scriptObject.get());
                 return std::make_pair(false, scene_error_return(ctx));
             }
-            logger_custom::debug("state_serve_scene_parameters Found script {}", "MiniMolestMain_Script");
+            logger_custom::debug("state_scene_start Found script {}", "MiniMolestMain_Script");
 
             std::vector<RE::Actor*> actors;
             std::vector<RE::Actor*> submissives;
@@ -427,7 +435,7 @@ namespace event_chain {
 
             RE::BSTSmartPointer<RE::BSScript::Array> papyrus_actors;
             if (papyrus_utils::actor_array_to_papyrus(vm, policy, actors, papyrus_actors)) {
-                logger_custom::debug("state_serve_scene_parameters Array actors converted to Papyrus");
+                logger_custom::debug("state_scene_start Array actors converted to Papyrus");
                 auto variableIter = scriptObject->GetVariable("SceneActors");
                 if (variableIter) {
                     success_count++;
@@ -454,60 +462,46 @@ namespace event_chain {
             if (success_count != 2)
                 return std::make_pair(false, scene_error_return(ctx));
 
-            return std::make_pair(true, fsm::state_wait_scene_set_thread_id(
-                ctx._clock.get_play_second() + ctx._settings._papyrus_sattelite_timeout_seconds,
-                a_handle,
-                std::make_pair(
-                    forced_scene_1npc_ids::set_scene_thread_id_timeout_id,
-                    [this](game::context& c) { return this->set_scene_thread_id_timeout_cb(c); }
-                ),
-                std::make_pair(
-                    forced_scene_1npc_ids::set_scene_thread_id_set_id,
-                    [this](game::context& c, float a_handle, int32_t a_thread_id) { return this->set_scene_thread_id_set_cb(c, a_handle, a_thread_id); }
-                )
-            ));
-        }
-
-        std::optional<fsm::fsm_state> forced_scene_1npc::set_scene_thread_id_timeout_cb(game::context& ctx) {
-            logger_custom::debug("fsm::state_wait_scene_set_thread_id timed out");
-            return scene_error_return_xl(ctx);
-        }
-
-        std::pair<bool, std::optional<fsm::fsm_state>> forced_scene_1npc::set_scene_thread_id_set_cb(game::context& ctx, float a_handle, int32_t a_thread_id) {
-            logger_custom::debug("fsm::state_wait_scene_set_thread_id thread id = {}", a_thread_id);
-			if (!_sl_hook_data.has_value() || _sl_hook_data.value()._sl_hook_id != a_handle || a_thread_id < 0)  // invalid handle or thread id    
-                return std::make_pair(false, scene_error_return_xl(ctx));
-
-            // We could also wait for the animation start event of SLP+ now, but I don't think this is a guarantee, that the the scene really starts
-            // Anyway, we give the player a Frostfall Exposure buff, does no harm
+            // Give the player a Frostfall Exposure buff, does no harm
             ReducePlayerExposure(-50.f);
 
             release_assert(_sl_hook_data.has_value());
             auto hook_name = _sl_hook_data.value()._sl_hook_end_name;
             _sl_hook_data.reset();
 
-            return std::make_pair(false, fsm::state_wait_for_mod_event(
+            return std::make_pair(true, fsm::state_scene_end(
                 ctx._clock.get_play_second() + ctx._settings._scene_duration_max_seconds,
+                a_handle,
                 hook_name,
                 std::make_pair(
-                    forced_scene_1npc_ids::wait_for_mod_event_timeout_id,
-                    [this](game::context& c) { return this->wait_for_mod_event_timeout_cb(c); }
+                    forced_scene_1npc_ids::scene_end_timeout_cb_id,
+                    [this](game::context& c) { return this->scene_end_timeout_cb(c); }
                 ),
                 std::make_pair(
-                    forced_scene_1npc_ids::wait_for_mod_event_received_id,
-                    [this](game::context& c) { return this->wait_for_mod_event_received_cb(c); }
-                )
-            ));
+                    forced_scene_1npc_ids::scene_end_papyrus_cb_id,
+                    [this](game::context& c, float a_handle, int32_t a_thread_id) { return this->scene_end_papyrus_cb(c, a_handle, a_thread_id); }
+                ),
+                std::make_pair(
+                    forced_scene_1npc_ids::scene_end_modevent_cb_id,
+                    [this](game::context& c) { return this->scene_end_modevent_cb(c); }
+                )));
         }
 
-        std::optional<fsm::fsm_state> forced_scene_1npc::wait_for_mod_event_timeout_cb(game::context& ctx) {
-            reset_npc1_handle();
-            set_retry_cooldown_xl(ctx, ctx._settings._scene_duration_max_seconds);
-            return fsm::state_idle{};
+        std::optional<fsm::fsm_state> forced_scene_1npc::scene_end_timeout_cb(game::context& ctx) {
+            logger_custom::debug("fsm::state_wait_scene_set_thread_id timed out");
+            return scene_error_return_xl(ctx);
+        }
+
+        std::pair<bool, std::optional<fsm::fsm_state>> forced_scene_1npc::scene_end_papyrus_cb(game::context& ctx, float a_handle, int32_t a_thread_id) {
+            logger_custom::debug("fsm::state_wait_scene_set_thread_id thread id = {}", a_thread_id);
+			if (!_sl_hook_data.has_value() || _sl_hook_data.value()._sl_hook_id != a_handle || a_thread_id < 0)  // invalid handle or thread id    
+                return std::make_pair(false, scene_error_return_xl(ctx));
+            return std::make_pair(true, std::nullopt);
         }
         
-        std::optional<fsm::fsm_state> forced_scene_1npc::wait_for_mod_event_received_cb(game::context& ctx) {
-            logger_custom::debug("fsm::state_wait_for_mod_event event received");
+        std::optional<fsm::fsm_state> forced_scene_1npc::scene_end_modevent_cb(game::context& ctx) {
+            logger_custom::debug("fsm::state_scene_end event received");
+
             // TODO: More statistics, better probability calculations
             auto actorPtr = _npc1_handle.get();
             if (actorPtr) {
@@ -515,6 +509,7 @@ namespace event_chain {
             }
             reset_npc1_handle();
             set_regular_cooldown(ctx);
+            serialization::save_blocker::unblock();             ////////////////////////////// Enable save games again
             return fsm::state_idle{};
         }
 

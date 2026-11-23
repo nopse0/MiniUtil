@@ -11,6 +11,7 @@
 #include "equip_hook.h"
 #include "skyrim_util.h"
 #include "console.h"
+#include "serialization.h"
 #include "spdlog/sinks/sink.h"
 
 // Clean start, don't load data from save game (this is only guaranteed to work, if the player was in the idle state, when saving the game, otherwise
@@ -31,7 +32,7 @@ public:
 		if (a_event && a_event->menuName == RE::RaceSexMenu::MENU_NAME && !a_event->opening) {
 			skyrim_util::reset_skills();
 			if (a_source) {
-				a_source->RemoveEventSink(this);
+				a_source->RemoveEventSink(this); // one time hook, only at new game
 				logger::info("RaceSexMenuCloseHook hook removed");
 			}
 			logger::info("RaceSexMenuCloseHook reset all skills to 1");
@@ -39,6 +40,67 @@ public:
 		return RE::BSEventNotifyControl::kContinue;
 	}
 };
+
+class MenuOpenCloseHook : public RE::BSTEventSink<RE::MenuOpenCloseEvent>, public singleton<MenuOpenCloseHook>
+{
+public:
+	// Das Event wird gefeuert, wenn ein Menü geöffnet oder geschlossen wird
+	virtual RE::BSEventNotifyControl ProcessEvent(const RE::MenuOpenCloseEvent* a_event, RE::BSTEventSource<RE::MenuOpenCloseEvent>* a_source) override
+	{
+		if (!a_event)
+			return RE::BSEventNotifyControl::kContinue;
+
+		// Menu open
+		if (a_event->opening) {
+			if (a_event->menuName == RE::DialogueMenu::MENU_NAME) {
+				auto* topicManager = RE::MenuTopicManager::GetSingleton();
+				release_assert(topicManager);				
+				if (auto refPtr = topicManager->speaker.get()) {
+					if (auto* actor = refPtr->As<RE::Actor>()) {
+						controller::controller::get_instance().on_dialogmenu_open(actor);
+					}
+				}
+			}
+		}
+		else {
+			if (a_event->menuName == RE::DialogueMenu::MENU_NAME) {
+				logger::info("MenuOpenCloseHook dialog closed");
+				controller::controller::get_instance().on_dialogmenu_close();
+			}
+		}
+
+		return RE::BSEventNotifyControl::kContinue;
+	}
+};
+
+class TopicInfoEventHandler : public RE::BSTEventSink<RE::TESTopicInfoEvent>, public singleton<TopicInfoEventHandler> {
+public:
+	RE::BSEventNotifyControl ProcessEvent(
+		const RE::TESTopicInfoEvent* a_event,
+		RE::BSTEventSource<RE::TESTopicInfoEvent>*) override {
+
+		logger::trace("TopicInfoEventHandler::ProcessEvent");
+
+		if (!a_event) {
+			return RE::BSEventNotifyControl::kContinue;
+		}
+
+		// 1. Prüfen, ob das Topic gerade gestartet wurde (entspricht TIF Begin)
+		if (a_event->type == RE::TESTopicInfoEvent::TopicInfoEventType::kTopicBegin) {
+			logger::trace("TopicInfoEventHandler::ProcessEvent kTopicBegin");
+			auto actor = a_event->speakerRef ? a_event->speakerRef->As<RE::Actor>() : nullptr;
+			if (actor) {
+				logger::trace("TopicInfoEventHandler::ProcessEvent calling controller, actor id {:08X} actor name {}, form id {:08X}", actor->GetFormID(),
+					actor->GetActorBase() ? actor->GetActorBase()->GetName() : "", a_event->topicInfoFormID);
+				controller::controller::get_instance().fn_topicinfo_begin(actor, a_event->topicInfoFormID);
+			}
+		}
+
+		return RE::BSEventNotifyControl::kContinue;
+	}
+};
+
+
 
 namespace main_loop {
 	void install();
@@ -63,7 +125,7 @@ void MiniUtil_OnDialogEnd(RE::StaticFunctionTag*, RE::Actor* akSpeaker)
 {
 	if (ModDisabled)
 		return;
-	controller::controller::get_instance().on_dialog_end(akSpeaker);
+	//controller::controller::get_instance().on_dialog_end(akSpeaker);
 }
 
 bool MiniMolest_GetSceneParameters(RE::TESQuest* thisInstance, float handle)
@@ -306,6 +368,15 @@ void OnSKSEMessage(SKSE::MessagingInterface::Message* a_msg)
 			equip::equip_event_listener::Register();
 			logger::info("Installed equip_event_listener");
 		}
+		if (auto ui = RE::UI::GetSingleton()) {
+			ui->GetEventSource<RE::MenuOpenCloseEvent>()->AddEventSink(&MenuOpenCloseHook::get_instance());
+			logger::info("MenuOpenCloseHook installed");
+		}
+		if (auto* eventSourceHolder = RE::ScriptEventSourceHolder::GetSingleton()) {
+			eventSourceHolder->GetEventSource<RE::TESTopicInfoEvent>()->AddEventSink(&TopicInfoEventHandler::get_instance());
+			SKSE::log::info("TopicInfoEventHandler erfolgreich registriert.");
+		}
+		serialization::save_blocker::detail::install_hook();
 		break;
 
 	case SKSE::MessagingInterface::kNewGame: {
@@ -405,6 +476,8 @@ extern "C" __declspec(dllexport) bool SKSEPlugin_Load(const SKSE::LoadInterface*
 		logger::info("ResetSkills = {}", ResetSkills);
 		SelfMadeEquipOnly = ini.GetLongValue("Config", "SelfMadeEquipOnly", 0);
 		logger::info("SelfMadeEquipOnly = {}", SelfMadeEquipOnly);
+		ModTesting = ini.GetLongValue("Config", "ModTesting", 0);
+		logger::info("ModTesting = {}", ModTesting);
 	}
 	else
 		InitializeLogging(std::nullopt);

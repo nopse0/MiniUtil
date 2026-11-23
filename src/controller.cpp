@@ -74,8 +74,20 @@ namespace controller {
     }
 
     // Functions called from Papyrus scripts
-    void controller::on_dialog_end(RE::Actor* a_speaker) {
-        _fsm.process_dialog_finished(_context, a_speaker);
+    //void controller::on_dialog_end(RE::Actor* a_speaker) {
+    //    _fsm.process_dialog_finished(_context, a_speaker);
+    //}
+
+    void controller::on_dialogmenu_open(RE::Actor* a_speaker) {
+        _fsm.process_dialogmenu_open(_context, a_speaker);
+    }
+    
+    void controller::on_dialogmenu_close() {
+        _fsm.process_dialogmenu_close(_context);
+    }
+    
+    void controller::fn_topicinfo_begin(RE::Actor* a_speaker, RE::FormID a_form_id) {
+        _fsm.process_topicinfo_begin(_context, a_speaker, a_form_id);
     }
 
     bool controller::on_get_scene_parameters(RE::TESQuest* a_this, float a_handle) {
